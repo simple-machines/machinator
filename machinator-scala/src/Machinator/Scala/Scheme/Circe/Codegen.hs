@@ -1,8 +1,8 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
 module Machinator.Scala.Scheme.Circe.Codegen (
-    generateCirceModuleV1
-  , generateCirceV1
+    generateCirceV1
+  , generateToJsonV1Companion
   , generateToJsonV1
   , generateFromJsonV1
   ) where
@@ -10,6 +10,8 @@ module Machinator.Scala.Scheme.Circe.Codegen (
 
 import qualified Data.List as L
 import qualified Data.Text as T
+import qualified Data.Text.Lazy as TL
+
 
 import qualified Machinator.Core as M
 import qualified Machinator.Core.Data.Definition as M
@@ -21,13 +23,6 @@ import           P
 import           Text.PrettyPrint.Annotated.WL (Doc, (<+>))
 import qualified Text.PrettyPrint.Annotated.WL as WL
 
-generateCirceModuleV1 :: [M.Definition] -> Doc a
-generateCirceModuleV1 defs =
-  WL.vsep $ concat [
-      [text "import io.circe.{Decoder, DecodingFailure, Encoder, HCursor, Json}"]
-    , generateCirceV1 defs
-  ]
-
 
 generateCirceV1 :: [M.Definition] -> [Doc a]
 generateCirceV1 defs =
@@ -35,6 +30,20 @@ generateCirceV1 defs =
       generateToJsonV1 def
     , generateFromJsonV1 def
     ]
+
+
+generateToJsonV1Companion :: M.Definition -> Text
+generateToJsonV1Companion def@(M.Definition (M.Name tn) _) =
+  renderText $
+    text "object" <+> text tn <+> text "{" <> WL.hardline <>
+      WL.indent 2 (
+        WL.vsep [
+          generateToJsonV1 def
+        , generateFromJsonV1 def
+        ]
+      )  <> WL.hardline <> text "}"
+
+
 
 generateToJsonV1 :: M.Definition -> Doc a
 generateToJsonV1 (M.Definition (M.Name tn) typ) =
@@ -131,3 +140,8 @@ string =
 text :: Text -> Doc a
 text =
   WL.text . T.unpack
+
+
+renderText :: Doc a -> Text
+renderText =
+  TL.toStrict . WL.displayT . WL.renderPrettyDefault

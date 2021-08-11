@@ -13,6 +13,7 @@ import qualified Data.Text as T
 import           Machinator.Core
 import qualified Machinator.Core.Graph as MG
 import           Machinator.Scala.Data.Types
+import qualified Machinator.Scala.Scheme.Circe.Codegen as Codegen
 import qualified Machinator.Scala.Scheme.Types.Codegen as Codegen
 
 import           P
@@ -43,12 +44,13 @@ renderModule mn@(ModuleName n) imports defs =
       T.unwords ["module", n, "where"]
     , maybe mempty (T.unlines . fmap renderImport . toList) (M.lookup mn imports)
     , T.unlines . with defs $ \def ->
-        Codegen.genTypesV1 def
+        Codegen.genTypesV1 def <> "\n" <> Codegen.generateToJsonV1Companion def
     ]
 
 renderImport :: ModuleName -> Text
 renderImport (ModuleName n) =
   "import " <> n
+
 
 -- -----------------------------------------------------------------------------
 

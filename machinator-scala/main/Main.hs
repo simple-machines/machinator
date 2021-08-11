@@ -29,9 +29,14 @@ imputs = many (strArgument (metavar "machinator"))
 
 main :: IO ()
 main = do
-  files <- execParser opts
+  files       <- execParser opts
   definitions <- orDie (T.pack . show) $ parseData files
-  IO.print definitions
+  results     <- orDie (T.pack . show) $ hoistEither $ typesV1 definitions
+
+  for_ results $ \(fp, contents) -> do
+    IO.putStrLn fp
+    IO.putStrLn "===="
+    T.putStrLn contents
 
 
   where
@@ -41,10 +46,11 @@ main = do
      <> header "hello - a test for optparse-applicative" )
 
 
-parseData :: [FilePath] -> EitherT Machinator.MachinatorError IO [Machinator.Definition]
-parseData dfiles =
-  fmap fold . for dfiles $ \dfile -> do
+parseData :: [FilePath] -> EitherT Machinator.MachinatorError IO [Machinator.DefinitionFile]
+parseData dfiles = do
+  for dfiles  $ \dfile -> do
     t <- liftIO (T.readFile dfile)
-    Machinator.Versioned _v (Machinator.DefinitionFile _fp defs) <-
+    Machinator.Versioned _v defs <-
       hoistEither (Machinator.parseDefinitionFile dfile t)
     pure defs
+
