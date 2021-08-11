@@ -96,7 +96,7 @@ groundFromName n =
 
 -- | Declarable datatypes, e.g. sums or records.
 data DataType
-  = Variant (NonEmpty (Name, [Type]))
+  = Variant (NonEmpty (Name, [(Name, Type)]))
   | Record [(Name, Type)]
   deriving (Eq, Ord, Show, Data, Typeable, Generic)
 
@@ -106,8 +106,8 @@ free :: DataType -> Set Name
 free d =
   case d of
     Variant nts ->
-      fold . with nts $ \(_, ts) ->
-        S.fromList . catMaybes . with ts $ freeInType
+      fold . with nts $ \(_, fts) ->
+        S.fromList . catMaybes . with fts $ \(_, t) -> (freeInType t)
     Record fts ->
       S.fromList . catMaybes . with fts $ \(_, t) -> (freeInType t)
 

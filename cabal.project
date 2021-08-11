@@ -1,0 +1,25 @@
+packages: machinator-core/
+          machinator-haskell/
+          machinator-scala/
+          lib/disorder/disorder-aeson
+          lib/disorder/disorder-core
+          lib/disorder/disorder-corpus
+          lib/disorder/disorder-jack
+          lib/x/x-optparse/
+          lib/x/x-bytestring/
+          lib/x/x-attoparsec/
+          lib/x/x-eithert/
+          lib/x/x-exception/
+          lib/x/x-vector/
+          lib/x/x-templatehaskell/
+          lib/x/x-show/
+          lib/x/x-aeson/
+          lib/x/x-file-embed/
+          lib/p/
+
+constraints:
+  cabal > 2
+
+package icicle
+  tests: True
+

@@ -69,7 +69,7 @@ ppDefinition' (Definition n ty) =
     Record fts ->
       ppRecord n fts
 
-ppVariant :: Name -> NonEmpty (Name, [Type]) -> Doc SyntaxAnnotation
+ppVariant :: Name -> NonEmpty (Name, [(Name, Type)]) -> Doc SyntaxAnnotation
 ppVariant (Name n) cs =
   WL.hang
     2
@@ -83,12 +83,12 @@ ppVariant (Name n) cs =
            (WL.linebreak WL.<> punctuation "|")
            (NE.toList (fmap (uncurry ppConstructor) cs)))))
 
-ppConstructor :: Name -> [Type] -> Doc SyntaxAnnotation
+ppConstructor :: Name -> [(Name, Type)] -> Doc SyntaxAnnotation
 ppConstructor nn@(Name n) ts =
   WL.hang
     2
     (WL.annotate (ConstructorDefinition n) (ppName nn) WL.<>
-     foldl' (<+>) WL.empty (fmap (ppType 11) ts))
+     foldl' (<+>) WL.empty (fmap (uncurry (ppRecordField nn)) ts))
 
 ppRecord :: Name -> [(Name, Type)] -> Doc SyntaxAnnotation
 ppRecord nn@(Name n) fts =

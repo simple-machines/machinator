@@ -122,10 +122,12 @@ variant v = do
   cs <- sepBy1 (alternative v) (token TChoice)
   pure (Definition x (Variant cs))
 
-alternative :: MachinatorVersion -> Parser (Name, [Type])
+alternative :: MachinatorVersion -> Parser (Name, [(Name, Type)])
 alternative v = do
   name <- ident
-  ts <- many (types v)
+  token TLBrace
+  ts <- sepBy (recordField v) (token TComma)
+  token TRBrace
   pure (name, ts)
 
 record :: MachinatorVersion -> Parser Definition

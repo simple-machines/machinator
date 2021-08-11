@@ -1,14 +1,14 @@
-name:                  ambiata-machinator-haskell
+name:                  ambiata-machinator-scala
 version:               1.0.0
 license:               BSD3
 author:                Ambiata <info@ambiata.com>
 maintainer:            Ambiata <info@ambiata.com>
-copyright:             (c) 2015 Ambiata.
-synopsis:              ambiata-machinator-haskell
+copyright:             (c) 2017 Ambiata.
+synopsis:              ambiata-machinator-scala
 category:              System
 cabal-version:         >= 1.8
 build-type:            Simple
-description:           ambiata-machinator-haskell
+description:           ambiata-machinator-scala
 
 library
   build-depends:
@@ -16,13 +16,12 @@ library
                      , ambiata-machinator-core
                      , ambiata-p
                      , ambiata-x-eithert
-                     , ambiata-x-templatehaskell
                      , containers
                      , filepath                        == 1.4.*
                      , semigroups                      == 0.18.*
-                     , template-haskell                >= 2.10       && < 2.12
                      , text                            == 1.2.*
                      , transformers                    >= 0.4        && < 0.7
+                     , wl-pprint-annotated             == 0.1.*
 
   ghc-options:
                        -Wall
@@ -31,11 +30,11 @@ library
                        src
 
   exposed-modules:
-                       Machinator.Haskell
-                       Machinator.Haskell.Aeson.CodeGen
-                       Machinator.Haskell.Data.Types
-                       Machinator.Haskell.Scheme.Types
-                       Machinator.Haskell.TH.Types
+                       Machinator.Scala
+                       Machinator.Scala.Data.Types
+                       Machinator.Scala.Scheme.Types
+                       Machinator.Scala.Scheme.Circe.Codegen
+                       Machinator.Scala.Scheme.Types.Codegen
 
 test-suite test
   type:                exitcode-stdio-1.0
@@ -51,10 +50,9 @@ test-suite test
                        base                            >= 3          && < 5
                      , ambiata-disorder-core
                      , ambiata-disorder-corpus
-                     , ambiata-disorder-jack  
+                     , ambiata-disorder-jack
                      , ambiata-p
                      , ambiata-machinator-core
-                     , ambiata-machinator-haskell
                      , QuickCheck                      >= 2.8.2      && < 2.9
                      , quickcheck-instances            == 0.3.*
                      , semigroups
@@ -78,7 +76,6 @@ test-suite test-io
                      , ambiata-p
                      , ambiata-machinator-core
                      , ambiata-machinator-core-test
-                     , ambiata-machinator-haskell
                      , QuickCheck                      >= 2.8.2      && < 2.9
                      , quickcheck-instances            == 0.3.*
                      , semigroups
