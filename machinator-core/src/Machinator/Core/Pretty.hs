@@ -122,6 +122,11 @@ ppType p t =
         punctuation "(" WL.<> primitive "List" <+> ppType 11 lt WL.<> punctuation ")"
       else
         primitive "List" <+> ppType 11 lt
+    MaybeT lt ->
+      if p > 10 then
+        punctuation "(" WL.<> primitive "Maybe" <+> ppType 11 lt WL.<> punctuation ")"
+      else
+        primitive "Maybe" <+> ppType 11 lt
 
 ppGroundType :: Ground -> Doc SyntaxAnnotation
 ppGroundType =

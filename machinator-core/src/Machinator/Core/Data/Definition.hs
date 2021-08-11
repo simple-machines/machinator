@@ -66,6 +66,7 @@ data Type
   = Variable Name
   | GroundT Ground
   | ListT Type
+  | MaybeT Type
   deriving (Eq, Ord, Show, Data, Typeable, Generic)
 
 -- | Ground types, e.g. platform primitives.
@@ -119,4 +120,6 @@ freeInType t =
     GroundT _ ->
       empty
     ListT lt ->
+      freeInType lt
+    MaybeT lt ->
       freeInType lt

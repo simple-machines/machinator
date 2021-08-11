@@ -4,7 +4,6 @@ module Machinator.Scala.Scheme.Circe.Codegen (
     generateCirceModuleV1
   , generateCirceV1
   , generateToJsonV1
-  , generateFromJsonNameV1
   , generateFromJsonV1
   ) where
 
@@ -37,15 +36,6 @@ generateCirceV1 defs =
     , generateFromJsonV1 def
     ]
 
--- generateToJsonNameV1 :: M.Name -> Doc a
--- generateToJsonNameV1 (M.Name n) =
---   TH.mkName $
---     "toJsonV1" <> T.unpack n
-
--- generateToJsonSigV1 :: M.Name -> Doc a
--- generateToJsonSigV1 tn@(M.Name n) =
---   XTH.sig (generateToJsonNameV1 tn) (XTH.arrowT_ (XTH.conT (XTH.mkName_ n)) (XTH.conT (XTH.mkName_ "Data.Circe.Value")))
-
 generateToJsonV1 :: M.Definition -> Doc a
 generateToJsonV1 (M.Definition (M.Name tn) typ) =
   text "implicit val" <+>
@@ -74,42 +64,45 @@ generateToJsonV1 (M.Definition (M.Name tn) typ) =
       ]
 
 
-toJsonFields :: [([Text], M.Type)] -> Doc a
-toJsonFields fts =
-  mempty
-
-typeToJson :: M.Type -> Doc a
-typeToJson ty =
-  mempty
-
-generateFromJsonNameV1 :: M.Name -> Doc a
-generateFromJsonNameV1 (M.Name n) =
-  mempty
-
-
-generateFromJsonSigV1 :: M.Name -> Doc a
-generateFromJsonSigV1 tn@(M.Name n) =
-  mempty
-
 generateFromJsonV1 :: M.Definition -> Doc a
-generateFromJsonV1 def@(M.Definition (M.Name n) _typ) =
-  mempty
+generateFromJsonV1 def@(M.Definition (M.Name tn) typ) =
+  text "implicit val" <+>
+    text tn <> text "Decoder" <> text ":" <+> text "io.circe.Decoder" <+> text "=" <> WL.hardline <>
+      WL.indent 2 (
+        text "(c: io.circe.HCursor)" <+> "=>" <> WL.hardline <>
+          WL.indent 2 (
+            case typ of
+              M.Variant cts ->
+                text "c.downField(\"adt_type\").as[String] flatMap {" <> WL.hardline <> (
+                  WL.indent 2 $
+                    WL.vsep $
+                      with (toList cts) $ \(M.Name n, fts) ->
+                        text "case" <+> WL.dquotes (text n) <+> text "=>" <> WL.hardline <>
+                          (WL.indent 2 $
+                            case fts of
+                              [] ->
+                                text "Right" <> WL.parens (text n <> "()")
+                              _ ->
+                                text "for" <+> text "{" <> WL.hardline <>
+                                  WL.indent 2 (
+                                    WL.vsep $
+                                      with fts $ \(M.Name f, ft) ->
+                                        text f <+> text "<-" <+> text "c.downField(\"" <> text f <>"\").as[" <> genTypeV1 ft <> "]"
+                                  ) <> WL.hardline <> text "yield" <+> text n <> WL.tupled (with fts $ \(M.Name n, ty) -> text n)
+                          )
+                  )
 
-matchTagFields :: M.Definition -> Doc a
-matchTagFields (M.Definition tn@(M.Name n) typ) =
-  mempty
-
-orFail :: Text -> [Doc a] -> [Doc a]
-orFail n ms =
-  mempty
-
-fromJsonFields :: M.Name -> [([Char], M.Type)] -> Doc a
-fromJsonFields (M.Name n) fts =
-  mempty
-
-typeFromJson :: M.Type -> Doc a
-typeFromJson ty =
-  mempty
+              M.Record fts ->
+                WL.indent 2 (
+                  text "for" <+> text "{" <> WL.hardline <>
+                    WL.indent 2 (
+                      WL.vsep $
+                        with fts $ \(M.Name f, ft) ->
+                          text f <+> text "<-" <+> text "c.downField(\"" <> text f <>"\").as[" <> genTypeV1 ft <> "]"
+                    ) <> WL.hardline <> text "yield" <+> text tn <> WL.tupled (with fts $ \(M.Name n, ty) -> text n)
+                )
+          )
+      )
 
 -- -----------------------------------------------------------------------------
 

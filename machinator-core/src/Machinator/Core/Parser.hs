@@ -158,6 +158,8 @@ types' v = do
   case x of
     Name "List" ->
       hasFeature v HasLists *> (ListT <$> types v)
+    Name "Maybe" ->
+      hasFeature v HasLists *> (MaybeT <$> types v)
     _ ->
       case groundFromName x of
         Just t ->

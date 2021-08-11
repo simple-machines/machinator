@@ -45,6 +45,8 @@ genTypeV1 ty =
           text "Boolean"
     ListT t2 ->
       string "List" <> WL.brackets (genTypeV1 t2)
+    MaybeT t2 ->
+      string "Option" <> WL.brackets (genTypeV1 t2)
 
 genConstructorV1 :: Name -> Name -> [(Name, Type)] -> Doc a
 genConstructorV1 (Name extends) constructorName tys =
