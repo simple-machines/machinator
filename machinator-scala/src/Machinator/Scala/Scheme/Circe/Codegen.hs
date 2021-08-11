@@ -88,7 +88,8 @@ generateFromJsonV1 def@(M.Definition (M.Name tn) typ) =
                                     WL.vsep $
                                       with fts $ \(M.Name f, ft) ->
                                         text f <+> text "<-" <+> text "c.downField(\"" <> text f <>"\").as[" <> genTypeV1 ft <> "]"
-                                  ) <> WL.hardline <> text "yield" <+> text n <> WL.tupled (with fts $ \(M.Name n, ty) -> text n)
+                                  ) <> WL.hardline <>
+                                text "yield" <+> text "}" <+> text n <> WL.tupled (with fts $ \(M.Name n, ty) -> text n)
                           )
                   )
 
@@ -99,7 +100,8 @@ generateFromJsonV1 def@(M.Definition (M.Name tn) typ) =
                       WL.vsep $
                         with fts $ \(M.Name f, ft) ->
                           text f <+> text "<-" <+> text "c.downField(\"" <> text f <>"\").as[" <> genTypeV1 ft <> "]"
-                    ) <> WL.hardline <> text "yield" <+> text tn <> WL.tupled (with fts $ \(M.Name n, ty) -> text n)
+                    ) <> WL.hardline <>
+                  text "yield" <+> text "}" <+> text tn <> WL.tupled (with fts $ \(M.Name n, ty) -> text n)
                 )
           )
       )
