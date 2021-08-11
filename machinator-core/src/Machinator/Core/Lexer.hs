@@ -74,6 +74,9 @@ token' =
     , M.try $
         string (T.unpack recordKeyword) >> M.spaceChar
           >> pure TRecord
+    , M.try $
+        string (T.unpack newtypeKeyword) >> M.spaceChar
+          >> pure TNewType
     , string "=" *> pure TEquals
     , string "|" *> pure TChoice
     , string "(" *> pure TLParen

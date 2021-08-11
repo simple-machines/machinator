@@ -24,8 +24,8 @@ import           Machinator.Scala as Machinator
 
 
 
-imputs :: Parser [FilePath]
-imputs = many (strArgument (metavar "machinator"))
+inputs :: Parser [FilePath]
+inputs = many (strArgument (metavar "machinator"))
 
 main :: IO ()
 main = do
@@ -38,13 +38,11 @@ main = do
     IO.putStrLn "===="
     T.putStrLn contents
 
-
   where
-    opts = info (imputs <**> helper)
+    opts = info (inputs <**> helper)
       ( fullDesc
      <> progDesc "Print a greeting for TARGET"
      <> header "hello - a test for optparse-applicative" )
-
 
 parseData :: [FilePath] -> EitherT Machinator.MachinatorError IO [Machinator.DefinitionFile]
 parseData dfiles = do

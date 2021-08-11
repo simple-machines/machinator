@@ -32,6 +32,9 @@ genTypesV1 (Definition name@(Name n) dec) =
     Record fts ->
       genRecordV1 name fts
 
+    NewType ft ->
+      genRecordV1 name [ft]
+
 genTypeV1 :: Type -> Doc a
 genTypeV1 ty =
   case ty of
@@ -43,6 +46,8 @@ genTypeV1 ty =
           text "String"
         BoolT ->
           text "Boolean"
+        IntT ->
+          text "Int"
     ListT t2 ->
       string "List" <> WL.brackets (genTypeV1 t2)
     MaybeT t2 ->

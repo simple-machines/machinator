@@ -133,7 +133,7 @@ alternative v = do
 record :: MachinatorVersion -> Parser Definition
 record v = do
   hasFeature v HasRecords
-  M.try (token TRecord)
+  M.try (token TNewType)
   x <- ident
   token TEquals
   token TLBrace
@@ -168,6 +168,8 @@ types' v = do
               hasFeature v HasStrings *> pure (GroundT t)
             BoolT ->
               hasFeature v HasBools *> pure (GroundT t)
+            IntT ->
+              pure (GroundT t)
         Nothing ->
           pure (Variable x)
 

@@ -73,6 +73,7 @@ data Type
 data Ground
   = StringT
   | BoolT
+  | IntT
   deriving (Eq, Ord, Show, Data, Typeable, Generic)
 
 -- | Obtain the stringy form for a ground type.
@@ -83,6 +84,8 @@ groundToName g =
       Name "String"
     BoolT ->
       Name "Bool"
+    IntT ->
+      Name "Int"
 
 -- | Obtain the ground type for a stringy name.
 groundFromName :: Alternative f => Name -> f Ground
@@ -92,6 +95,8 @@ groundFromName n =
       pure StringT
     "Bool" ->
       pure BoolT
+    "Int" ->
+      pure IntT
     _ ->
       empty
 
@@ -99,6 +104,7 @@ groundFromName n =
 data DataType
   = Variant (NonEmpty (Name, [(Name, Type)]))
   | Record [(Name, Type)]
+  | NewType (Name, Type)
   deriving (Eq, Ord, Show, Data, Typeable, Generic)
 
 -- -----------------------------------------------------------------------------
@@ -111,6 +117,8 @@ free d =
         S.fromList . catMaybes . with fts $ \(_, t) -> (freeInType t)
     Record fts ->
       S.fromList . catMaybes . with fts $ \(_, t) -> (freeInType t)
+    NewType (_, t) ->
+      S.fromList . maybeToList $ (freeInType t)
 
 freeInType :: Type -> Maybe Name
 freeInType t =

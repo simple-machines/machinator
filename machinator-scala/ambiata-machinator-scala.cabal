@@ -37,7 +37,7 @@ library
                        Machinator.Scala.Scheme.Types.Codegen
 
 
-executable corba
+executable gen-scala
   hs-source-dirs:      main
   main-is:             Main.hs
   ghc-options:         -Wall -threaded -O2

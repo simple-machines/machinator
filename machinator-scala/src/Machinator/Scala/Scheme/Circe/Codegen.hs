@@ -76,31 +76,33 @@ generateToJsonV1 (M.Definition (M.Name tn) typ) =
 generateFromJsonV1 :: M.Definition -> Doc a
 generateFromJsonV1 def@(M.Definition (M.Name tn) typ) =
   text "implicit val" <+>
-    text tn <> text "Decoder" <> text ":" <+> text "io.circe.Decoder" <+> text "=" <> WL.hardline <>
+    text tn <> text "Decoder" <> text ":" <+> text "io.circe.Decoder" <> WL.brackets (text tn) <+> text "=" <> WL.hardline <>
       WL.indent 2 (
         text "(c: io.circe.HCursor)" <+> "=>" <> WL.hardline <>
           WL.indent 2 (
             case typ of
               M.Variant cts ->
                 text "c.downField(\"adt_type\").as[String] flatMap {" <> WL.hardline <> (
-                  WL.indent 2 $
-                    WL.vsep $
-                      with (toList cts) $ \(M.Name n, fts) ->
-                        text "case" <+> WL.dquotes (text n) <+> text "=>" <> WL.hardline <>
-                          (WL.indent 2 $
-                            case fts of
-                              [] ->
-                                text "Right" <> WL.parens (text n <> "()")
-                              _ ->
-                                text "for" <+> text "{" <> WL.hardline <>
-                                  WL.indent 2 (
-                                    WL.vsep $
-                                      with fts $ \(M.Name f, ft) ->
-                                        text f <+> text "<-" <+> text "c.downField(\"" <> text f <>"\").as[" <> genTypeV1 ft <> "]"
-                                  ) <> WL.hardline <>
-                                text "yield" <+> text "}" <+> text n <> WL.tupled (with fts $ \(M.Name n, ty) -> text n)
-                          )
-                  )
+                  WL.vsep [
+                    WL.indent 2 $
+                      WL.vsep $
+                        with (toList cts) $ \(M.Name n, fts) ->
+                          text "case" <+> WL.dquotes (text n) <+> text "=>" <> WL.hardline <>
+                            (WL.indent 2 $
+                              case fts of
+                                [] ->
+                                  text "Right" <> WL.parens (text n <> "()")
+                                _ ->
+                                  text "for" <+> text "{" <> WL.hardline <>
+                                    WL.indent 2 (
+                                      WL.vsep $
+                                        with fts $ \(M.Name f, ft) ->
+                                          text f <+> text "<-" <+> text "c.downField(\"" <> text f <>"\").as[" <> genTypeV1 ft <> "]"
+                                    ) <> WL.hardline <>
+                                  text "}" <+> text "yield" <+> text n <> WL.tupled (with fts $ \(M.Name n, ty) -> text n)
+                            )
+                    ] <> WL.hardline <> text "}"
+                )
 
               M.Record fts ->
                 WL.indent 2 (
@@ -110,7 +112,7 @@ generateFromJsonV1 def@(M.Definition (M.Name tn) typ) =
                         with fts $ \(M.Name f, ft) ->
                           text f <+> text "<-" <+> text "c.downField(\"" <> text f <>"\").as[" <> genTypeV1 ft <> "]"
                     ) <> WL.hardline <>
-                  text "yield" <+> text "}" <+> text tn <> WL.tupled (with fts $ \(M.Name n, ty) -> text n)
+                  text "}" <+> text "yield" <+> text tn <> WL.tupled (with fts $ \(M.Name n, ty) -> text n)
                 )
           )
       )

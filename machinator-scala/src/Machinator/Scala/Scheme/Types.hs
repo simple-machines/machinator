@@ -41,7 +41,7 @@ typesV1 dfs =
 renderModule :: ModuleName -> Map ModuleName (Set ModuleName) -> [Definition] -> Text
 renderModule mn@(ModuleName n) imports defs =
   T.unlines [
-      T.unwords ["module", n, "where"]
+      T.unwords ["package", n]
     , maybe mempty (T.unlines . fmap renderImport . toList) (M.lookup mn imports)
     , T.unlines . with defs $ \def ->
         Codegen.genTypesV1 def <> "\n" <> Codegen.generateToJsonV1Companion def
@@ -83,4 +83,4 @@ filePathToModuleName =
 
 genFileName :: ModuleName -> FilePath
 genFileName (ModuleName n) =
-  T.unpack (T.replace "." "/" n) <> ".purs"
+  T.unpack (T.replace "." "/" n) <> ".scala"
