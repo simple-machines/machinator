@@ -58,7 +58,7 @@ generateToJsonV1 (M.Definition (M.Name tn) typ) =
                   text "case" <+> (
                     WL.hang 2 $ text n <> WL.tupled (with fts $ \(M.Name n, _) -> text n) <+> text "=>" <> WL.softline <>
                       object (
-                        field "adt_type" (text "io.circe.Json.fromString" <> WL.parens (WL.dquotes (text n)))
+                        field "adt_type" (text "io.circe.Json.fromString" <> WL.parens (WL.dquotes (makeDiscriminator tn n)))
                       : (with fts $ \(M.Name n, typ) -> field n (text "io.circe.Encoder" <> WL.brackets (genTypeV1 typ) <> text ".apply" <> WL.parens (text n)))
                       )
                   )
@@ -87,7 +87,7 @@ generateFromJsonV1 def@(M.Definition (M.Name tn) typ) =
                     WL.indent 2 $
                       WL.vsep $
                         with (toList cts) $ \(M.Name n, fts) ->
-                          text "case" <+> WL.dquotes (text n) <+> text "=>" <> WL.hardline <>
+                          text "case" <+> WL.dquotes (makeDiscriminator tn n) <+> text "=>" <> WL.hardline <>
                             (WL.indent 2 $
                               case fts of
                                 [] ->
@@ -147,3 +147,10 @@ text =
 renderText :: Doc a -> Text
 renderText =
   TL.toStrict . WL.displayT . WL.renderPrettyDefault
+
+makeDiscriminator :: Text -> Text -> Doc a
+makeDiscriminator parent constructor =
+  text $
+    T.toLower $
+      fromMaybe constructor $
+        T.stripSuffix parent constructor
