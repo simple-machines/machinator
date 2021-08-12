@@ -68,7 +68,7 @@ generateToJsonV1 (M.Definition (M.Name tn) typ) =
               XTH.match_
                 (XTH.conP (XTH.mkName_ n) (fmap (XTH.varP . TH.mkName) pats))
                 (object $
-                    field "tag" (TH.SigE (XTH.litE (XTH.stringL_ n)) text_)
+                    field "adt_type" (TH.SigE (XTH.litE (XTH.stringL_ n)) text_)
                   : toJsonFields (L.zip pats (fmap (first (T.unpack . M.unName)) fts))
                 )
       M.Record fts ->
@@ -125,9 +125,9 @@ generateFromJsonV1 (M.Definition tn@(M.Name n) typ) =
         case typ of
           M.Variant cts ->
             TH.DoE [
-                TH.BindS (XTH.varP (TH.mkName "tag")) (XTH.varE (TH.mkName "o") .: "tag")
+                TH.BindS (XTH.varP (TH.mkName "adt_type")) (XTH.varE (TH.mkName "o") .: "adt_type")
               , TH.NoBindS $
-                  XTH.caseE (TH.SigE (XTH.varE (TH.mkName "tag")) text_) . orFail n $
+                  XTH.caseE (TH.SigE (XTH.varE (TH.mkName "adt_type")) text_) . orFail n $
                     let
                       matchTag s = XTH.match_ (TH.LitP (XTH.stringL_ s))
                     in
