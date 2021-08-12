@@ -133,7 +133,7 @@ alternative v = do
 record :: MachinatorVersion -> Parser Definition
 record v = do
   hasFeature v HasRecords
-  M.try (token TNewType)
+  M.try (token TRecord)
   x <- ident
   token TEquals
   token TLBrace

@@ -32,9 +32,6 @@ genTypesV1 (Definition name@(Name n) dec) =
     Record fts ->
       genRecordV1 name fts
 
-    NewType ft ->
-      genRecordV1 name [ft]
-
 genTypeV1 :: Type -> Doc a
 genTypeV1 ty =
   case ty of

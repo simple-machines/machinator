@@ -104,7 +104,6 @@ groundFromName n =
 data DataType
   = Variant (NonEmpty (Name, [(Name, Type)]))
   | Record [(Name, Type)]
-  | NewType (Name, Type)
   deriving (Eq, Ord, Show, Data, Typeable, Generic)
 
 -- -----------------------------------------------------------------------------
@@ -117,8 +116,6 @@ free d =
         S.fromList . catMaybes . with fts $ \(_, t) -> (freeInType t)
     Record fts ->
       S.fromList . catMaybes . with fts $ \(_, t) -> (freeInType t)
-    NewType (_, t) ->
-      S.fromList . maybeToList $ (freeInType t)
 
 freeInType :: Type -> Maybe Name
 freeInType t =

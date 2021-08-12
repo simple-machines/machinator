@@ -33,9 +33,9 @@ genTypesV1 (Definition nn@(Name n) d) =
       XTH.data_ (XTH.mkName_ n) [] [genRecV1 nn fts]
 
 -- | Generate a regular variant constructor.
-genConV1 :: Name -> [Type] -> TH.Con
+genConV1 :: Name -> [(Name, Type)] -> TH.Con
 genConV1 (Name n) ts =
-  XTH.normalC_' (XTH.mkName_ n) (fmap genTypeV1 ts)
+  XTH.normalC_' (XTH.mkName_ n) (fmap (genTypeV1 . snd) ts)
 
 -- | Generate a record constructor.
 genRecV1 :: Name -> [(Name, Type)] -> TH.Con
@@ -65,5 +65,9 @@ genTypeV1 ty =
           XTH.conT (XTH.mkName_ "Text")
         BoolT ->
           XTH.conT (XTH.mkName_ "Bool")
+        IntT ->
+          XTH.conT (XTH.mkName_ "Int")
     ListT t2 ->
       XTH.listT_ (genTypeV1 t2)
+    MaybeT t2 ->
+      XTH.appT (XTH.conT (XTH.mkName_ "Maybe")) (genTypeV1 t2)
