@@ -38,8 +38,10 @@ import           System.IO  (FilePath)
 
 -- | A set of type definitions from a given file.
 data DefinitionFile
-  = DefinitionFile FilePath [Definition]
-  deriving (Eq, Ord, Show, Data, Typeable, Generic)
+  = DefinitionFile {
+      definitionFileName :: FilePath
+    , definitionFileDefinitions :: [Definition]
+    } deriving (Eq, Ord, Show, Data, Typeable, Generic)
 
 -- | A single data definition.
 data Definition = Definition {

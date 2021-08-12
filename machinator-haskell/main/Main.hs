@@ -21,6 +21,7 @@ import           X.Options.Applicative (dispatch, safeCommand, RunType (..), Saf
 
 import           Machinator.Core as Machinator
 import           Machinator.Haskell as Machinator
+import           Machinator.Haskell.Aeson.CodeGen (generateAesonModuleV1)
 
 
 
@@ -32,11 +33,18 @@ main = do
   files       <- execParser opts
   definitions <- orDie (T.pack . show) $ parseData files
   results     <- orDie (T.pack . show) $ hoistEither $ typesV1 definitions
+  let aeson    = generateAesonModuleV1 (concatMap definitionFileDefinitions definitions)
 
   for_ results $ \(fp, contents) -> do
     IO.putStrLn fp
     IO.putStrLn "===="
     T.putStrLn contents
+
+  IO.putStrLn ""
+  IO.putStrLn ""
+
+  T.putStrLn aeson
+
 
   where
     opts = info (inputs <**> helper)

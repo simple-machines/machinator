@@ -17,6 +17,7 @@ library
                      , ambiata-p
                      , ambiata-x-eithert
                      , ambiata-x-templatehaskell
+                     , aeson
                      , containers
                      , filepath                        == 1.4.*
                      , semigroups                      == 0.18.*

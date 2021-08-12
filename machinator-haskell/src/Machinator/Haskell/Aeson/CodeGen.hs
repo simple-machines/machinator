@@ -67,10 +67,10 @@ generateToJsonV1 (M.Definition (M.Name tn) typ) =
             in
               XTH.match_
                 (XTH.conP (XTH.mkName_ n) (fmap (XTH.varP . TH.mkName) pats))
-                (object [
+                (object $
                     field "tag" (TH.SigE (XTH.litE (XTH.stringL_ n)) text_)
-                  , field "fields" (toJsonFields (fmap (first (T.unpack . M.unName)) fts))
-                  ])
+                  : toJsonFields (L.zip pats (fmap (first (T.unpack . M.unName)) fts))
+                )
       M.Record fts ->
         XTH.caseE (XTH.varE (TH.mkName "x")) . (:[]) $
           let
@@ -78,12 +78,12 @@ generateToJsonV1 (M.Definition (M.Name tn) typ) =
           in
             XTH.match_
               (XTH.conP (XTH.mkName_ tn) (fmap (XTH.varP . TH.mkName) pats))
-              (toJsonFields (fmap (first (T.unpack . M.unName)) fts))
+              (object $ toJsonFields (L.zip pats (fmap (first (T.unpack . M.unName)) fts)))
 
-toJsonFields :: [([Char], M.Type)] -> Exp
+toJsonFields :: [([Char], ([Char], M.Type))] -> [Exp]
 toJsonFields fts =
-  object . flip fmap fts $ \(n, mty) ->
-    field (T.pack n) (XTH.appE (typeToJson mty) (XTH.varE (TH.mkName n)))
+  flip fmap fts $ \(fn, (n, mty)) ->
+    field (T.pack n) (XTH.appE (typeToJson mty) (XTH.varE (TH.mkName fn)))
 
 typeToJson :: M.Type -> Exp
 typeToJson ty =
@@ -118,28 +118,24 @@ generateFromJsonSigV1 tn@(M.Name n) =
       (XTH.appT (XTH.conT (XTH.mkName_ "Data.Aeson.Types.Parser")) (XTH.conT (XTH.mkName_ n))))
 
 generateFromJsonV1 :: M.Definition -> Exp
-generateFromJsonV1 def@(M.Definition (M.Name n) _typ) =
+generateFromJsonV1 (M.Definition tn@(M.Name n) typ) =
   XTH.lamE [XTH.varP (TH.mkName "x")] $
     withObject__ (T.unpack n) (XTH.varE (TH.mkName "x")) $
       XTH.lamE [XTH.varP (TH.mkName "o")] $
-        TH.DoE [
-            TH.BindS (XTH.varP (TH.mkName "tag")) (XTH.varE (TH.mkName "o") .: "tag")
-          , TH.BindS (XTH.varP (TH.mkName "fields")) (XTH.varE (TH.mkName "o") .: "fields")
-          , TH.NoBindS (matchTagFields def)
-          ]
-
-matchTagFields :: M.Definition -> Exp
-matchTagFields (M.Definition tn@(M.Name n) typ) =
-  case typ of
-    M.Variant cts ->
-      XTH.caseE (TH.SigE (XTH.varE (TH.mkName "tag")) text_) . orFail n $
-        let
-          matchTag s = XTH.match_ (TH.LitP (XTH.stringL_ s))
-        in
-          flip fmap (toList cts) $ \(cn@(M.Name cnn), fts) ->
-            matchTag cnn (fromJsonFields cn (fmap (first (T.unpack . M.unName)) fts))
-    M.Record fts ->
-      fromJsonFields tn (fmap (first (T.unpack . M.unName)) fts)
+        case typ of
+          M.Variant cts ->
+            TH.DoE [
+                TH.BindS (XTH.varP (TH.mkName "tag")) (XTH.varE (TH.mkName "o") .: "tag")
+              , TH.NoBindS $
+                  XTH.caseE (TH.SigE (XTH.varE (TH.mkName "tag")) text_) . orFail n $
+                    let
+                      matchTag s = XTH.match_ (TH.LitP (XTH.stringL_ s))
+                    in
+                      flip fmap (toList cts) $ \(cn@(M.Name cnn), fts) ->
+                        matchTag cnn (fromJsonFields cn (fmap (first (T.unpack . M.unName)) fts))
+              ]
+          M.Record fts ->
+            fromJsonFields tn (fmap (first (T.unpack . M.unName)) fts)
 
 
 orFail :: Text -> [TH.Match] -> [TH.Match]
@@ -148,12 +144,10 @@ orFail n ms =
 
 fromJsonFields :: M.Name -> [([Char], M.Type)] -> Exp
 fromJsonFields (M.Name n) fts =
-  withObject__ (T.unpack n) (XTH.varE (TH.mkName "fields")) $
-    XTH.lamE [XTH.varP (TH.mkName "f")] $
-      TH.DoE $
-           (flip fmap fts $ \(fn, ft) ->
-             TH.BindS (XTH.varP (TH.mkName fn)) (parseFieldWith (XTH.varE (TH.mkName "f")) (T.pack fn) (typeFromJson ft)))
-        <> [TH.NoBindS (return_ (XTH.applyE (XTH.conE (XTH.mkName_ n)) (fmap (XTH.varE . TH.mkName . fst) fts)))]
+  TH.DoE $
+        (flip fmap fts $ \(fn, ft) ->
+          TH.BindS (XTH.varP (TH.mkName fn)) (parseFieldWith (XTH.varE (TH.mkName "o")) (T.pack fn) (typeFromJson ft)))
+    <> [TH.NoBindS (return_ (XTH.applyE (XTH.conE (XTH.mkName_ n)) (fmap (XTH.varE . TH.mkName . fst) fts)))]
 
 typeFromJson :: M.Type -> Exp
 typeFromJson ty =
