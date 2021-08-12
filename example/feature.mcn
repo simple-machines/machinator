@@ -1,0 +1,7 @@
+-- machinator @ v2
+
+data Feature = EventFeature { name : String, aggregate: AggregateExpression, filter: FilterExpression } | RowFeature {}
+
+record FeatureSet = { x : String, y : List Int }
+
+record FeatureStore = { set: FeatureSet, time : Int, optional: Maybe Int }
