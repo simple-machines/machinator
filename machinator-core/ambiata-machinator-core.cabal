@@ -20,7 +20,7 @@ library
                      , semigroups                      == 0.18.*
                      , text                            == 1.2.*
                      , transformers                    >= 0.4        && < 0.6
-                     , megaparsec                      == 5.1.*
+                     , megaparsec                      >= 7.0        && < 8.0
 
   ghc-options:
                        -Wall
@@ -56,7 +56,7 @@ test-suite test
                        base                            >= 3          && < 5
                      , ambiata-disorder-core
                      , ambiata-disorder-corpus
-                     , ambiata-disorder-jack  
+                     , ambiata-disorder-jack
                      , ambiata-p
                      , ambiata-machinator-core
                      , containers

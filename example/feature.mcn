@@ -1,7 +1,32 @@
 -- machinator @ v2
 
-data Feature = EventFeature { name : String, aggregate: AggregateExpression, filter: FilterExpression } | RowFeature {}
-
-record FeatureSet = { x : String, y : List Int }
-
-record FeatureStore = { set: FeatureSet, time : Int, optional: Maybe Int }
+data Feature
+ = EventFeature {
+    id: FeatureId,
+    name: FeatureName,
+    description: String,
+    labels: List Label,
+    attributes: List Attribute ,
+    qualityRating: Maybe QualityRating,
+    table: TableId,
+    window: EventWindow,
+    select: SelectExpression,
+    filter: Maybe FilterExpression,
+    aggregate: AggregateExpression,
+    postAggregateExpr: Maybe PostAggregateExpression,
+    template: Maybe TemplateId,
+    version: FeatureVersionId
+   }
+  | RowFeature {
+     id: FeatureId,
+     name: FeatureName,
+     description: String,
+     labels: List Label,
+     attributes: List Attribute ,
+     qualityRating: Maybe QualityRating,
+     over: List FeatureId,
+     select: SelectExpression,
+     entityId: EntityId,
+     template: Maybe TemplateId,
+     version: FeatureVersionId
+   }

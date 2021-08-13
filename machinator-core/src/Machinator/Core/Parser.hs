@@ -11,6 +11,9 @@ module Machinator.Core.Parser (
 
 
 import           Data.List.NonEmpty (NonEmpty(..))
+import qualified Data.List.NonEmpty as NonEmpty
+import qualified Data.List as List
+import           Data.Proxy (Proxy (..))
 import qualified Data.Set as S
 import qualified Data.Text as T
 
@@ -24,6 +27,7 @@ import           P
 import           System.IO (FilePath)
 
 import qualified Text.Megaparsec as M
+import           Text.Megaparsec.Error (errorBundlePretty)
 
 
 data ParseError = ParseError Text
@@ -38,45 +42,105 @@ renderParseError e =
 -- | Pure parser for definition files.
 --
 -- The 'FilePath' is for error reporting.
-parseDefinitionFile :: FilePath -> Versioned [Positioned Token] -> Either ParseError (Versioned DefinitionFile)
-parseDefinitionFile file (Versioned v ts) =
-  first (ParseError . T.pack . show) (M.runParser (parseVersioned file v <* M.eof) file (TokenStream ts))
+parseDefinitionFile :: FilePath -> Text -> Versioned [Positioned Token] -> Either ParseError (Versioned DefinitionFile)
+parseDefinitionFile file contents (Versioned v ts) =
+  first (ParseError . T.pack . errorBundlePretty) (M.runParser (parseVersioned file v <* M.eof) file (TokenStream contents ts))
 
 
 -- -----------------------------------------------------------------------------
 
 type Parser = M.Parsec ParseErrorComponent TokenStream
 
-newtype TokenStream = TokenStream {
-    unTokenStream :: [Positioned Token]
+data TokenStream = TokenStream {
+    myStreamInput :: Text -- for showing offending lines
+  , unTokenStream :: [Positioned Token]
   } deriving (Eq, Ord, Show)
 
 instance M.Stream TokenStream where
-  type Token TokenStream = Positioned MT.Token
+  type Token TokenStream =
+    Positioned Token
 
-  {-# INLINE uncons #-}
-  uncons ts =
-    case unTokenStream ts of
-      [] -> Nothing
-      (pt : rest) -> Just (pt, TokenStream rest)
+  type Tokens TokenStream =
+    [Positioned Token]
 
-  {-# INLINE updatePos #-}
-  updatePos _ _ l (_ :@ b) =
-    (l, positionPos (rangeStart b))
+  tokenToChunk Proxy =
+    pure
+  tokensToChunk Proxy =
+    id
+  chunkToTokens Proxy =
+    id
+  chunkLength Proxy =
+    length
+  chunkEmpty Proxy =
+    null
+  take1_ (TokenStream _ [])
+    = Nothing
+  take1_ (TokenStream str (t:ts))
+    = Just ( t , TokenStream str ts)
+
+  takeN_ n (TokenStream str s)
+    | n <= 0    = Just ([], TokenStream str s)
+    | null s    = Nothing
+    | otherwise =
+        let (x, s') = splitAt n s
+         in Just (x, TokenStream str s')
+
+  takeWhile_ f (TokenStream str s) =
+    let (x, s') = List.span f s
+     in (x, TokenStream str s')
+
+
+  showTokens _ =
+    List.intercalate " " . NonEmpty.toList . fmap (show . extractPositioned)
+
+  reachOffset o (M.PosState input offset sourcePos tabWidth _) =
+    ( newSourcePos
+    , fromMaybe "" thisLine
+    , M.PosState
+        { M.pstateInput = TokenStream (myStreamInput input) post
+        , M.pstateOffset = max offset o
+        , M.pstateSourcePos = newSourcePos
+        , M.pstateTabWidth = tabWidth
+        , M.pstateLinePrefix = ""
+        }
+    )
+    where
+      newSourcePos =
+        case post of
+          [] ->    sourcePos
+          (x:_) -> toSourcePos $ extractStartPosition x
+
+      post =
+        drop (o - offset) (unTokenStream input)
+
+      (!?) :: [a] -> Int -> Maybe a
+      (!?) [] _ = Nothing
+      (!?) (x:xs) n | n == 0 = return x
+                    | n < 0 = Nothing
+                    | otherwise = (!?) xs (n-1)
+
+      thisLine = fmap T.unpack $
+        T.lines (myStreamInput input) !? (M.unPos (M.sourceLine newSourcePos) - 1)
+
+      toSourcePos :: Position -> M.SourcePos
+      toSourcePos = \case
+        Position srcLine srcCol file ->
+          M.SourcePos file
+            (M.mkPos srcLine)
+            (M.mkPos srcCol)
+
 
 data ParseErrorComponent
-  = ParseFail Text
-  | ParseBadIndent Ordering M.Pos M.Pos
-  | FeatureGuard MachinatorVersion MachinatorFeature
+  = FeatureGuard MachinatorVersion MachinatorFeature
   deriving (Eq, Ord, Show)
 
-instance M.ErrorComponent ParseErrorComponent where
-  representFail = ParseFail . T.pack
-  representIndentation = ParseBadIndent
+instance M.ShowErrorComponent ParseErrorComponent where
+  showErrorComponent (FeatureGuard v f) =
+    "Can't use feature: " <> show f <> "; version: " <> show (versionToNumber v :: Int)
 
 parseError :: ParseErrorComponent -> Parser a
-parseError e =
-  M.failure S.empty S.empty (S.singleton e)
+parseError =
+  M.customFailure
 
 -- -----------------------------------------------------------------------------
 
@@ -217,13 +281,10 @@ token t =
   satisfy (== t) *> pure ()
 
 satisfy :: (Token -> Bool) -> Parser Token
-satisfy f = M.token testToken Nothing
+satisfy f = M.token testToken S.empty
   where
-    testToken x@(a :@ _) =
-      if f a
-        then Right a
-        else Left (S.singleton (M.Tokens (x:|[])), S.empty, S.empty)
-
-positionPos :: Position -> M.SourcePos
-positionPos (Position line col file) =
-  M.SourcePos file (M.unsafePos (fromIntegral line)) (M.unsafePos (fromIntegral col))
+    testToken (a :@ _) =
+      if f a then
+        Just a
+      else
+        Nothing

@@ -17,11 +17,10 @@ library
                      , ambiata-p
                      , ambiata-x-eithert
                      , ambiata-x-templatehaskell
-                     , aeson
                      , containers
                      , filepath                        == 1.4.*
                      , semigroups                      == 0.18.*
-                     , template-haskell                >= 2.10       && < 2.12
+                     , template-haskell                >= 2.10       && < 2.16
                      , text                            == 1.2.*
                      , transformers                    >= 0.4        && < 0.7
 

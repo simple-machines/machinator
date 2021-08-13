@@ -53,7 +53,7 @@ data Definition = Definition {
 -- Maps each file to the other files it depends on.
 newtype DefinitionFileGraph = DefinitionFileGraph {
     unDefinitionFileGraph :: Map FilePath (Set FilePath)
-  } deriving (Eq, Ord, Show, Monoid, Data, Typeable, Generic)
+  } deriving (Eq, Ord, Show, Semigroup, Monoid, Data, Typeable, Generic)
 
 
 -- -----------------------------------------------------------------------------

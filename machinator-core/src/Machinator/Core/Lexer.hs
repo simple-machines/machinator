@@ -8,6 +8,7 @@ module Machinator.Core.Lexer (
 
 
 import qualified Data.Text as T
+import           Data.Void (Void)
 
 import           Machinator.Core.Data.Position
 import           Machinator.Core.Data.Token
@@ -17,10 +18,12 @@ import           P
 
 import           System.IO  (FilePath)
 
-import qualified Text.Megaparsec.Lexer as ML
+import qualified Text.Megaparsec.Char.Lexer as ML
+import qualified Text.Megaparsec.Char as M
 import qualified Text.Megaparsec as M
-import           Text.Megaparsec.Text  (Parser)
+import           Text.Megaparsec.Error (errorBundlePretty)
 
+type Parser = M.Parsec Void Text
 
 data LexError
   = LexError Text
@@ -34,7 +37,7 @@ renderLexError e =
 
 lexVersioned :: FilePath -> Text -> Either LexError (Versioned [Positioned Token])
 lexVersioned file t =
-  first (LexError . T.pack . M.parseErrorPretty) (M.runParser (lexVersioned' <* M.eof) file t)
+  first (LexError . T.pack . errorBundlePretty) (M.runParser (lexVersioned' <* M.eof) file t)
 
 
 -- -----------------------------------------------------------------------------
@@ -51,10 +54,10 @@ lexVersioned' = do
 version :: Parser MachinatorVersion
 version = do
   string "-- machinator @ v"
-  v <- ML.integer
+  v <- ML.decimal
   _ <- M.newline
   space
-  case versionFromNumber v of
+  case versionFromNumber (v :: Int) of
     Just ver ->
       pure ver
     Nothing ->
@@ -108,12 +111,12 @@ space =
 
 string :: [Char] -> Parser ()
 string s =
-  M.string s *> pure ()
+  M.string (T.pack s) *> pure ()
 {-# INLINEABLE string #-}
 
 getPosition :: Parser Position
 getPosition =
-  fmap posPosition M.getPosition
+  fmap posPosition M.getSourcePos
 {-# INLINEABLE getPosition #-}
 
 withPosition :: Parser a -> Parser (Positioned a)

@@ -12,6 +12,7 @@ module Machinator.Core.Data.Position (
   , renderRange
   , Positioned (..)
   , extractPositioned
+  , extractStartPosition
   , (<@@)
   , (@@>)
   ) where
@@ -62,6 +63,12 @@ data Positioned a
 extractPositioned :: Positioned a -> a
 extractPositioned (a :@ _) =
   a
+
+
+extractStartPosition :: Positioned a -> Position
+extractStartPosition (_ :@ (Range a _)) =
+  a
+
 
 -- | Absorb the item to the right.
 (<@@) :: Positioned a -> Positioned b -> Positioned a
