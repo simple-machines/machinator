@@ -86,7 +86,7 @@ generateFromJsonV1 def@(M.Definition (M.Name tn) typ) =
                   WL.vsep [
                     WL.indent 2 $
                       WL.vsep $
-                        with (toList cts) $ \(M.Name n, fts) ->
+                        (with (toList cts) $ \(M.Name n, fts) ->
                           text "case" <+> WL.dquotes (makeDiscriminator tn n) <+> text "=>" <> WL.hardline <>
                             (WL.indent 2 $
                               case fts of
@@ -100,7 +100,13 @@ generateFromJsonV1 def@(M.Definition (M.Name tn) typ) =
                                           text f <+> text "<-" <+> text "c.downField(\"" <> text f <>"\").as[" <> genTypeV1 ft <> "]"
                                     ) <> WL.hardline <>
                                   text "}" <+> text "yield" <+> text n <> WL.tupled (with fts $ \(M.Name n, ty) -> text n)
-                            )
+                            ))
+                          <> [
+                            text "case unknown =>" <> WL.hardline <>
+                              (WL.indent 2 $
+                                text "Left(io.circe.DecodingFailure(s\"Unknown ADT constructor $unknown.\", c.history))"
+                              )
+                          ]
                     ] <> WL.hardline <> text "}"
                 )
 
