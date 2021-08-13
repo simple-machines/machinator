@@ -35,41 +35,35 @@ generateCirceV1 defs =
 generateToJsonV1Companion :: M.Definition -> Text
 generateToJsonV1Companion def@(M.Definition (M.Name tn) _) =
   renderText $
-    text "object" <+> text tn <+> text "{" <> WL.hardline <>
-      WL.indent 2 (
-        WL.vsep [
+    text "object" <+> text tn <+>
+      code_block [
           generateToJsonV1 def
         , generateFromJsonV1 def
         ]
-      )  <> WL.hardline <> text "}"
-
 
 
 generateToJsonV1 :: M.Definition -> Doc a
 generateToJsonV1 (M.Definition (M.Name tn) typ) =
   text "implicit val" <+>
-    text tn <> text "Encoder" <> text ":" <+> text "io.circe.Encoder" <> WL.brackets (text tn) <+> text "= {" <> WL.hardline <>
-      WL.vsep [
-        WL.indent 2 $
-          case typ of
-            M.Variant cts ->
-              WL.vsep $
-                with (toList cts) $ \(M.Name n, fts) ->
-                  text "case" <+> (
-                    WL.hang 2 $ text n <> WL.tupled (with fts $ \(M.Name n, _) -> text n) <+> text "=>" <> WL.softline <>
-                      object (
-                        field "adt_type" (text "io.circe.Json.fromString" <> WL.parens (WL.dquotes (makeDiscriminator tn n)))
-                      : (with fts $ \(M.Name n, typ) -> field n (text "io.circe.Encoder" <> WL.brackets (genTypeV1 typ) <> text ".apply" <> WL.parens (text n)))
-                      )
+    text tn <> text "Encoder" <> text ":" <+> text "io.circe.Encoder" <> WL.brackets (text tn) <+> text "=" <+>
+      code_block [
+        case typ of
+          M.Variant cts ->
+            WL.vsep $
+              with (toList cts) $ \(M.Name n, fts) ->
+                case_expr
+                  (text n <> WL.tupled (with fts $ \(M.Name n, _) -> text n))
+                  (object $
+                    field "adt_type" (text "io.circe.Json.fromString" <> WL.parens (WL.dquotes (makeDiscriminator tn n)))
+                  : (with fts $ \(M.Name n, typ) -> field n (text "io.circe.Encoder" <> WL.brackets (genTypeV1 typ) <> text ".apply" <> WL.parens (text n)))
                   )
-            M.Record fts ->
-              text "case" <+> (
-                WL.hang 2 $ text tn <> WL.tupled (with fts $ \(M.Name n, _) -> text n) <+> text "=>" <> WL.softline <>
-                  object (
-                    with fts $ \(M.Name n, typ) -> field n (text "io.circe.Encoder" <> WL.brackets (genTypeV1 typ) <> text ".apply" <> WL.parens (text n))
-                  )
+
+          M.Record fts ->
+            case_expr
+              (text tn <> WL.tupled (with fts $ \(M.Name n, _) -> text n))
+              (object $
+                with fts $ \(M.Name n, typ) -> field n (text "io.circe.Encoder" <> WL.brackets (genTypeV1 typ) <> text ".apply" <> WL.parens (text n))
               )
-      , text "}"
       ]
 
 
@@ -82,48 +76,62 @@ generateFromJsonV1 def@(M.Definition (M.Name tn) typ) =
           WL.indent 2 (
             case typ of
               M.Variant cts ->
-                text "c.downField(\"adt_type\").as[String] flatMap {" <> WL.hardline <> (
-                  WL.vsep [
-                    WL.indent 2 $
-                      WL.vsep $
-                        (with (toList cts) $ \(M.Name n, fts) ->
-                          text "case" <+> WL.dquotes (makeDiscriminator tn n) <+> text "=>" <> WL.hardline <>
-                            (WL.indent 2 $
-                              case fts of
-                                [] ->
-                                  text "Right" <> WL.parens (text n <> "()")
-                                _ ->
-                                  text "for" <+> text "{" <> WL.hardline <>
-                                    WL.indent 2 (
-                                      WL.vsep $
-                                        with fts $ \(M.Name f, ft) ->
-                                          text f <+> text "<-" <+> text "c.downField(\"" <> text f <>"\").as[" <> genTypeV1 ft <> "]"
-                                    ) <> WL.hardline <>
-                                  text "}" <+> text "yield" <+> text n <> WL.tupled (with fts $ \(M.Name n, ty) -> text n)
-                            ))
-                          <> [
-                            text "case unknown =>" <> WL.hardline <>
-                              (WL.indent 2 $
-                                text "Left(io.circe.DecodingFailure(s\"Unknown ADT constructor $unknown.\", c.history))"
-                              )
-                          ]
-                    ] <> WL.hardline <> text "}"
-                )
+                text "c.downField(\"adt_type\").as[String] flatMap" <+>
+                  (code_block $
+                    (with (toList cts) $ \(M.Name n, fts) ->
+                      case_expr
+                        (WL.dquotes (makeDiscriminator tn n))
+                        (case fts of
+                            [] ->
+                              text "Right" <> WL.parens (text n <> "()")
+                            _ ->
+                              for_yield
+                                (with fts $ \(M.Name f, ft) ->
+                                  (text f, text "c.downField(\"" <> text f <>"\").as[" <> genTypeV1 ft <> "]"))
+                                (text n <> WL.tupled (with fts $ \(M.Name n, ty) -> text n))
+                        ))
+                      <> [
+                        case_expr
+                          (text "unknown")
+                          (text "Left(io.circe.DecodingFailure(s\"Unknown ADT constructor $unknown.\", c.history))")
+                      ])
 
               M.Record fts ->
-                WL.indent 2 (
-                  text "for" <+> text "{" <> WL.hardline <>
-                    WL.indent 2 (
-                      WL.vsep $
-                        with fts $ \(M.Name f, ft) ->
-                          text f <+> text "<-" <+> text "c.downField(\"" <> text f <>"\").as[" <> genTypeV1 ft <> "]"
-                    ) <> WL.hardline <>
-                  text "}" <+> text "yield" <+> text tn <> WL.tupled (with fts $ \(M.Name n, ty) -> text n)
-                )
+                for_yield
+                  (with fts $ \(M.Name f, ft) ->
+                    (text f, text "c.downField(\"" <> text f <>"\").as[" <> genTypeV1 ft <> "]"))
+                  (text tn <> WL.tupled (with fts $ \(M.Name n, ty) -> text n))
           )
       )
 
 -- -----------------------------------------------------------------------------
+
+for_yield :: [(Doc a, Doc a)] -> Doc a -> Doc a
+for_yield binds yield =
+  let
+    bindings =
+      with binds $ \(binding, expr) ->
+        binding <+> text "<-" <+> expr
+  in
+    text "for" <+> code_block bindings <+> text "yield" <+> yield
+
+
+code_block :: [Doc a] -> Doc a
+code_block exprs =
+  WL.vsep [
+    text "{"
+  , WL.indent 2 $
+      WL.vsep exprs
+  , text "}"
+  ]
+
+case_expr :: Doc a -> Doc a -> Doc a
+case_expr discriminator rhs =
+  WL.vsep [
+    text "case" <+> discriminator <+> text "=>"
+  , WL.indent 2 rhs
+  ]
+
 
 object :: [Doc a] -> Doc a
 object es =

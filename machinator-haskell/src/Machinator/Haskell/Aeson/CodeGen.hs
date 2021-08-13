@@ -12,7 +12,6 @@ module Machinator.Haskell.Aeson.CodeGen (
   ) where
 
 
-import qualified Data.List as L
 import qualified Data.Text as T
 
 import           Language.Haskell.TH (Dec, Exp)
@@ -63,13 +62,13 @@ generateToJsonV1 (M.Definition (M.Name tn) typ) =
         XTH.caseE (XTH.varE (TH.mkName "x")) $
           flip fmap (toList cts) $ \(M.Name n, fts) ->
             let
-              pats = L.take (L.length fts) fieldPats
+              pats = fmap (T.unpack . M.unName . fst) fts
             in
               XTH.match_
                 (XTH.conP (XTH.mkName_ n) (fmap (XTH.varP . TH.mkName) pats))
                 (object $
                     field "adt_type" (TH.SigE (XTH.litE (XTH.stringL_ n)) text_)
-                  : toJsonFields (L.zip pats (fmap (first (T.unpack . M.unName)) fts))
+                  : toJsonFields (fmap (first (T.unpack . M.unName)) fts)
                 )
       M.Record fts ->
         XTH.caseE (XTH.varE (TH.mkName "x")) . (:[]) $
@@ -78,12 +77,12 @@ generateToJsonV1 (M.Definition (M.Name tn) typ) =
           in
             XTH.match_
               (XTH.conP (XTH.mkName_ tn) (fmap (XTH.varP . TH.mkName) pats))
-              (object $ toJsonFields (L.zip pats (fmap (first (T.unpack . M.unName)) fts)))
+              (object $ toJsonFields (fmap (first (T.unpack . M.unName)) fts))
 
-toJsonFields :: [([Char], ([Char], M.Type))] -> [Exp]
+toJsonFields :: [([Char], M.Type)] -> [Exp]
 toJsonFields fts =
-  flip fmap fts $ \(fn, (n, mty)) ->
-    field (T.pack n) (XTH.appE (typeToJson mty) (XTH.varE (TH.mkName fn)))
+  flip fmap fts $ \(n, mty) ->
+    field (T.pack n) (XTH.appE (typeToJson mty) (XTH.varE (TH.mkName n)))
 
 typeToJson :: M.Type -> Exp
 typeToJson ty =
@@ -180,10 +179,6 @@ field fn v =
     (Just (XTH.litE (XTH.stringL_ fn)))
     (XTH.varE (TH.mkName "Data.Aeson..="))
     (Just v)
-
-fieldPats :: [[Char]]
-fieldPats =
-  fmap (("f" <>) . show) (L.iterate (+1) (1::Int))
 
 mapM__ :: Exp -> Exp
 mapM__ =
