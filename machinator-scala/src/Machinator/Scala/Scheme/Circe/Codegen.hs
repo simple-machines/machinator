@@ -8,7 +8,6 @@ module Machinator.Scala.Scheme.Circe.Codegen (
   ) where
 
 
-import qualified Data.List as L
 import qualified Data.Text as T
 import qualified Data.Text.Lazy as TL
 
@@ -26,7 +25,7 @@ import qualified Text.PrettyPrint.Annotated.WL as WL
 
 generateCirceV1 :: [M.Definition] -> [Doc a]
 generateCirceV1 defs =
-  concat . with defs $ \def@(M.Definition n _ty) -> [
+  concat . with defs $ \def -> [
       generateToJsonV1 def
     , generateFromJsonV1 def
     ]
@@ -51,24 +50,32 @@ generateToJsonV1 (M.Definition (M.Name tn) typ) =
           M.Variant cts ->
             WL.vsep $
               with (toList cts) $ \(M.Name n, fts) ->
-                case_expr
-                  (text n <> WL.tupled (with fts $ \(M.Name n, _) -> text n))
-                  (object $
-                    field "adt_type" (text "io.circe.Json.fromString" <> WL.parens (WL.dquotes (makeDiscriminator tn n)))
-                  : (with fts $ \(M.Name n, typ) -> field n (text "io.circe.Encoder" <> WL.brackets (genTypeV1 typ) <> text ".apply" <> WL.parens (text n)))
-                  )
+                case fts of
+                  [] ->
+                    case_expr
+                      (text n)
+                      (object [
+                        field "adt_type" (text "io.circe.Json.fromString" <> WL.parens (WL.dquotes (makeDiscriminator tn n)))
+                      ])
+                  _ ->
+                    case_expr
+                      (text n <> WL.tupled (with fts $ \(M.Name fn, _) -> text fn))
+                      (object $
+                        field "adt_type" (text "io.circe.Json.fromString" <> WL.parens (WL.dquotes (makeDiscriminator tn n)))
+                      : with fts (\(M.Name fn, f'typ) -> field n (text "io.circe.Encoder" <> WL.brackets (genTypeV1 f'typ) <> text ".apply" <> WL.parens (text fn)))
+                      )
 
           M.Record fts ->
             case_expr
               (text tn <> WL.tupled (with fts $ \(M.Name n, _) -> text n))
               (object $
-                with fts $ \(M.Name n, typ) -> field n (text "io.circe.Encoder" <> WL.brackets (genTypeV1 typ) <> text ".apply" <> WL.parens (text n))
+                with fts $ \(M.Name n, f'typ) -> field n (text "io.circe.Encoder" <> WL.brackets (genTypeV1 f'typ) <> text ".apply" <> WL.parens (text n))
               )
       ]
 
 
 generateFromJsonV1 :: M.Definition -> Doc a
-generateFromJsonV1 def@(M.Definition (M.Name tn) typ) =
+generateFromJsonV1 (M.Definition (M.Name tn) typ) =
   text "implicit val" <+>
     text tn <> text "Decoder" <> text ":" <+> text "io.circe.Decoder" <> WL.brackets (text tn) <+> text "=" <> WL.hardline <>
       WL.indent 2 (
@@ -77,18 +84,18 @@ generateFromJsonV1 def@(M.Definition (M.Name tn) typ) =
             case typ of
               M.Variant cts ->
                 text "c.downField(\"adt_type\").as[String] flatMap" <+>
-                  (code_block $
-                    (with (toList cts) $ \(M.Name n, fts) ->
+                  code_block (
+                    with (toList cts) (\(M.Name n, fts) ->
                       case_expr
                         (WL.dquotes (makeDiscriminator tn n))
                         (case fts of
                             [] ->
-                              text "Right" <> WL.parens (text n <> "()")
+                              text "Right" <> WL.parens (text n)
                             _ ->
                               for_yield
                                 (with fts $ \(M.Name f, ft) ->
                                   (text f, text "c.downField(\"" <> text f <>"\").as[" <> genTypeV1 ft <> "]"))
-                                (text n <> WL.tupled (with fts $ \(M.Name n, ty) -> text n))
+                                (text n <> WL.tupled (with fts $ \(M.Name fn, _) -> text fn))
                         ))
                       <> [
                         case_expr
@@ -100,7 +107,7 @@ generateFromJsonV1 def@(M.Definition (M.Name tn) typ) =
                 for_yield
                   (with fts $ \(M.Name f, ft) ->
                     (text f, text "c.downField(\"" <> text f <>"\").as[" <> genTypeV1 ft <> "]"))
-                  (text tn <> WL.tupled (with fts $ \(M.Name n, ty) -> text n))
+                  (text tn <> WL.tupled (with fts $ \(M.Name n, _) -> text n))
           )
       )
 
@@ -141,17 +148,7 @@ object es =
 
 field :: Text -> Doc a -> Doc a
 field fn v =
-  WL.dquotes (text fn) <+> ("->") <+> v
-
-
-toJson_ :: Doc a
-toJson_ =
-  text "Encoder[A].apply"
-
-
-string :: [Char] -> Doc a
-string =
-  WL.text
+  WL.dquotes (text fn) <+> "->" <+> v
 
 text :: Text -> Doc a
 text =

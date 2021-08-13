@@ -61,11 +61,15 @@ genConstructorV1 (Name extends) constructorName tys =
 -- { foo :: String, bar :: String }
 -- @
 genRecordV1 :: Name -> [(Name, Type)] -> Doc a
+genRecordV1 (Name n) [] =
+  WL.hang 2 $
+    text "case object" <+> text n
+
 genRecordV1 (Name n) fts =
   WL.hang 2 $
     text "case class" <+> text n <> WL.tupled (
-      with fts $ \(Name n, ty) ->
-        text n <+> string ":" <+> genTypeV1 ty
+      with fts $ \(Name fn, ty) ->
+        text fn <+> string ":" <+> genTypeV1 ty
     )
 
 -- -----------------------------------------------------------------------------
