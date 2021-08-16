@@ -190,10 +190,9 @@ variant v = do
 alternative :: MachinatorVersion -> Parser (Name, [(Name, Type)])
 alternative v = do
   name <- ident
-  token TLBrace
-  ts <- sepBy (recordField v) (token TComma)
-  token TRBrace
-  pure (name, ts)
+  ts   <- optional $ do
+    token TLBrace *> sepBy (recordField v) (token TComma) <* token TRBrace
+  pure (name, fold ts)
 
 record :: MachinatorVersion -> Parser Definition
 record v = do
