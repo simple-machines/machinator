@@ -4,6 +4,7 @@ module Machinator.Core.Data.Token (
     Token (..)
   , recordKeyword
   , dataKeyword
+  , newtypeKeyword
   ) where
 
 
@@ -22,6 +23,7 @@ data Token
   | TComma
   | TTypeSig
   | TRecord
+  | TNewtype
   deriving (Eq, Ord, Show)
 
 
@@ -32,3 +34,7 @@ recordKeyword =
 dataKeyword :: Text
 dataKeyword =
   "data"
+
+newtypeKeyword :: Text
+newtypeKeyword =
+  "newtype"

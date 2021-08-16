@@ -68,6 +68,8 @@ ppDefinition' (Definition n ty) =
       ppVariant n cs
     Record fts ->
       ppRecord n fts
+    Newtype ft ->
+      ppNewtype n ft
 
 ppVariant :: Name -> NonEmpty (Name, [(Name, Type)]) -> Doc SyntaxAnnotation
 ppVariant (Name n) cs =
@@ -76,12 +78,12 @@ ppVariant (Name n) cs =
     (keyword "data" <+>
      WL.annotate (TypeDefinition n) (text n) <+>
      punctuation "=" WL.<$$>
-     (foldl'
-        (<+>)
-        (text " ")
-        (WL.punctuate
-           (WL.linebreak WL.<> punctuation "|")
-           (NE.toList (fmap (uncurry ppConstructor) cs)))))
+     foldl'
+       (<+>)
+       (text " ")
+       (WL.punctuate
+          (WL.linebreak WL.<> punctuation "|")
+          (NE.toList (fmap (uncurry ppConstructor) cs))))
 
 ppConstructor :: Name -> [(Name, Type)] -> Doc SyntaxAnnotation
 ppConstructor nn@(Name n) ts =
@@ -104,6 +106,17 @@ ppRecord nn@(Name n) fts =
        (WL.punctuate
           (WL.linebreak WL.<> punctuation ",")
           (fmap (uncurry (ppRecordField nn)) fts)) WL.<$$>
+     punctuation "}")
+
+ppNewtype :: Name -> (Name, Type) -> Doc SyntaxAnnotation
+ppNewtype nn@(Name n) (fn, ft) =
+  WL.hang
+    2
+    (keyword "newtype" <+>
+     WL.annotate (TypeDefinition n) (ppName nn) <+>
+     punctuation "=" <+>
+     punctuation "{" WL.<$$>
+     ppRecordField nn fn ft WL.<$$>
      punctuation "}")
 
 

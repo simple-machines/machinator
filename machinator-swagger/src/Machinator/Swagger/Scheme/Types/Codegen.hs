@@ -49,6 +49,10 @@ genTypesV1 (Definition (Name parent) dec) =
       makeRef parent $
         genRecordV1 fts
 
+    Newtype (_, ft) ->
+      makeRef parent $
+        genNewtype ft
+
 genRecordV1 :: [(Name, Type)] -> Schema
 genRecordV1 fts =
   let
@@ -63,6 +67,37 @@ genRecordV1 fts =
       & properties .~ Exts.fromList props
       & required   .~ reqs
 
+
+genNewtype :: Type -> Schema
+genNewtype wrappedType =
+  let
+    openWrappedType =
+      case wrappedType of
+        var@Variable {} ->
+          mempty
+            & allOf ?~ [genTypeV1 var]
+        GroundT g ->
+          case g of
+            StringT ->
+              mempty
+              & type_ ?~ OpenApiString
+            BoolT ->
+              mempty
+              & type_ ?~ OpenApiBoolean
+            IntT ->
+              mempty
+              & type_ ?~ OpenApiInteger
+        ListT t2 -> do
+          mempty
+            & type_ ?~ OpenApiArray
+            & items ?~ OpenApiItemsObject (genTypeV1 t2)
+
+        MaybeT t2 ->
+          genNewtype t2
+            & nullable ?~ True
+
+  in
+    openWrappedType
 
 
 makeRef :: Text -> Schema -> Declare (Definitions Schema) (Referenced Schema)
@@ -86,11 +121,10 @@ genTypeV1 ty =
         IntT ->
           Inline $ paramSchemaToSchema (Proxy :: Proxy Int)
     ListT t2 -> do
-      let ref = genTypeV1 t2
       Inline
         $ mempty
         & type_ ?~ OpenApiArray
-        & items ?~ OpenApiItemsObject ref
+        & items ?~ OpenApiItemsObject (genTypeV1 t2)
 
     MaybeT t2 ->
       genTypeV1 t2

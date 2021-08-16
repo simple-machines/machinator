@@ -11,13 +11,11 @@ import           Options.Applicative
 
 import           P
 
-import           System.Directory
 import           System.IO (IO, FilePath)
 import qualified System.IO as IO
 
 import           X.Control.Monad.Trans.Either (EitherT, hoistEither)
 import           X.Control.Monad.Trans.Either.Exit (orDie)
-import           X.Options.Applicative (dispatch, safeCommand, RunType (..), SafeCommand (..))
 
 import           Machinator.Core as Machinator
 import           Machinator.Scala as Machinator

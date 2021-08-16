@@ -31,6 +31,8 @@ genTypesV1 (Definition nn@(Name n) d) =
       XTH.data_ (XTH.mkName_ n) [] (fmap (uncurry genConV1) (toList nts))
     Record fts ->
       XTH.data_ (XTH.mkName_ n) [] [genRecV1 nn fts]
+    Newtype fts ->
+      TH.NewtypeD [] (XTH.mkName_ n) [] Nothing (genNtV1 nn fts) []
 
 -- | Generate a regular variant constructor.
 genConV1 :: Name -> [(Name, Type)] -> TH.Con
@@ -41,6 +43,11 @@ genConV1 (Name n) ts =
 genRecV1 :: Name -> [(Name, Type)] -> TH.Con
 genRecV1 nn@(Name n) fts =
   XTH.recC_' (XTH.mkName_ n) (fmap (bimap (genRecFieldNameV1 nn) genTypeV1) fts)
+
+-- | Generate a record constructor.
+genNtV1 :: Name -> (Name, Type) -> TH.Con
+genNtV1 nn@(Name n) fts =
+  XTH.recC_ (XTH.mkName_ n) [bimap (genRecFieldNameV1 nn) genTypeV1 fts]
 
 -- | The heuristic used to derive Haskell record field names.
 --

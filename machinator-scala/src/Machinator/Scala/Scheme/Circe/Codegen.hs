@@ -73,6 +73,10 @@ generateToJsonV1 (M.Definition (M.Name tn) typ) =
               ( object $
                   with fts $ \(M.Name n, f'typ) -> field n (text "io.circe.Encoder" <> WL.brackets (genTypeV1 f'typ) <> text ".apply" <> WL.parens (text n))
               )
+          M.Newtype (M.Name wrapper, wrappedType) ->
+            case_expr
+              (text tn <> WL.tupled [text wrapper])
+              (text "io.circe.Encoder" <> WL.brackets (genTypeV1 wrappedType) <> text ".apply" <> WL.parens (text wrapper))
       ]
 
 
@@ -120,6 +124,10 @@ generateFromJsonV1 (M.Definition (M.Name tn) typ) =
                         (text f, text "c.downField(\"" <> text f <> "\").as[" <> genTypeV1 ft <> "]")
                     )
                     (text tn <> WL.tupled (with fts $ \(M.Name n, _) -> text n))
+                M.Newtype (M.Name wrapper, wrappedType) ->
+                  for_yield
+                    [(text wrapper, text "c.as[" <> genTypeV1 wrappedType <> "]")]
+                    (text tn <> WL.tupled [text wrapper])
             )
       )
 

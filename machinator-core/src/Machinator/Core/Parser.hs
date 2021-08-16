@@ -175,6 +175,7 @@ definition :: MachinatorVersion -> Parser Definition
 definition v =
       record v
   <|> variant v
+  <|> newtype' v
 
 
 variant :: MachinatorVersion -> Parser Definition
@@ -204,6 +205,17 @@ record v = do
   fts <- sepBy (recordField v) (token TComma)
   token TRBrace
   pure (Definition x (Record fts))
+
+newtype' :: MachinatorVersion -> Parser Definition
+newtype' v = do
+  hasFeature v HasRecords
+  M.try (token TNewtype)
+  x <- ident
+  token TEquals
+  token TLBrace
+  ft <- recordField v
+  token TRBrace
+  pure (Definition x (Newtype ft))
 
 recordField :: MachinatorVersion -> Parser (Name, Type)
 recordField v = do

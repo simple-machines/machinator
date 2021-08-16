@@ -79,6 +79,16 @@ generateToJsonV1 (M.Definition (M.Name tn) typ) =
               (XTH.conP (XTH.mkName_ tn) (fmap (XTH.varP . TH.mkName) pats))
               (object $ toJsonFields (fmap (first (T.unpack . M.unName)) fts))
 
+      M.Newtype (M.Name fieldName, mty) ->
+        XTH.caseE (XTH.varE (TH.mkName "x")) . (:[]) $
+          let
+            fn   = T.unpack fieldName
+          in
+            XTH.match_
+              (XTH.conP (XTH.mkName_ tn) (fmap (XTH.varP . TH.mkName) [fn]))
+              (XTH.appE (typeToJson mty) (XTH.varE (TH.mkName fn)))
+
+
 toJsonFields :: [([Char], M.Type)] -> [Exp]
 toJsonFields fts =
   flip fmap fts $ \(n, mty) ->
@@ -119,10 +129,10 @@ generateFromJsonSigV1 tn@(M.Name n) =
 generateFromJsonV1 :: M.Definition -> Exp
 generateFromJsonV1 (M.Definition tn@(M.Name n) typ) =
   XTH.lamE [XTH.varP (TH.mkName "x")] $
-    withObject__ (T.unpack n) (XTH.varE (TH.mkName "x")) $
-      XTH.lamE [XTH.varP (TH.mkName "o")] $
-        case typ of
-          M.Variant cts ->
+    case typ of
+      M.Variant cts ->
+        withObject__ (T.unpack n) (XTH.varE (TH.mkName "x")) $
+          XTH.lamE [XTH.varP (TH.mkName "o")] $
             TH.DoE [
                 TH.BindS (XTH.varP (TH.mkName "adt_type")) (XTH.varE (TH.mkName "o") .: "adt_type")
               , TH.NoBindS $
@@ -133,8 +143,16 @@ generateFromJsonV1 (M.Definition tn@(M.Name n) typ) =
                       flip fmap (toList cts) $ \(cn@(M.Name cnn), fts) ->
                         matchTag cnn (fromJsonFields cn (fmap (first (T.unpack . M.unName)) fts))
               ]
-          M.Record fts ->
+      M.Record fts ->
+        withObject__ (T.unpack n) (XTH.varE (TH.mkName "x")) $
+          XTH.lamE [XTH.varP (TH.mkName "o")] $
             fromJsonFields tn (fmap (first (T.unpack . M.unName)) fts)
+      M.Newtype (M.Name fieldName, _) ->
+        let fieldNameX = TH.mkName . T.unpack $ fieldName
+          in TH.DoE [
+              TH.BindS (XTH.varP fieldNameX) (XTH.appE parseJson_ (XTH.varE (TH.mkName "x")))
+            , TH.NoBindS (return_ (XTH.applyE (XTH.conE (XTH.mkName_ n)) [XTH.varE fieldNameX]))
+            ]
 
 
 orFail :: Text -> [TH.Match] -> [TH.Match]

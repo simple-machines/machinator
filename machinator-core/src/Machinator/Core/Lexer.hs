@@ -72,19 +72,22 @@ token' :: Parser (Positioned Token)
 token' =
   withPosition $ M.choice [
       M.try $
-        string (T.unpack dataKeyword) >> M.spaceChar
-          >> pure TData
+        string (T.unpack dataKeyword) *> M.spaceChar
+          $> TData
     , M.try $
-        string (T.unpack recordKeyword) >> M.spaceChar
-          >> pure TRecord
-    , string "=" *> pure TEquals
-    , string "|" *> pure TChoice
-    , string "(" *> pure TLParen
-    , string ")" *> pure TRParen
-    , string "{" *> pure TLBrace
-    , string "}" *> pure TRBrace
-    , string ":" *> pure TTypeSig
-    , string "," *> pure TComma
+        string (T.unpack recordKeyword) *> M.spaceChar
+          $> TRecord
+    , M.try $
+        string (T.unpack newtypeKeyword) *> M.spaceChar
+          $> TNewtype
+    , string "=" $> TEquals
+    , string "|" $> TChoice
+    , string "(" $> TLParen
+    , string ")" $> TRParen
+    , string "{" $> TLBrace
+    , string "}" $> TRBrace
+    , string ":" $> TTypeSig
+    , string "," $> TComma
     , ident
     ]
 

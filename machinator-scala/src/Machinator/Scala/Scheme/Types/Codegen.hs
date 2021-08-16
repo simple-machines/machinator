@@ -16,7 +16,7 @@ import           Machinator.Core.Data.Definition
 
 import           P
 
-import           Text.PrettyPrint.Annotated.WL (Doc, (<+>), (<##>))
+import           Text.PrettyPrint.Annotated.WL (Doc, (<+>))
 import qualified Text.PrettyPrint.Annotated.WL as WL
 
 
@@ -31,6 +31,9 @@ genTypesV1 (Definition name@(Name n) dec) =
 
     Record fts ->
       genRecordV1 name fts
+
+    Newtype ft ->
+      genRecordV1 name [ft] <+> text "extends" <+> text "AnyVal"
 
 genTypeV1 :: Type -> Doc a
 genTypeV1 ty =
