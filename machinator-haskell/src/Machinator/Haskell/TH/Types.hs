@@ -74,6 +74,16 @@ genTypeV1 ty =
           XTH.conT (XTH.mkName_ "Bool")
         IntT ->
           XTH.conT (XTH.mkName_ "Int")
+        LongT ->
+          XTH.conT (XTH.mkName_ "Int64")
+        DoubleT ->
+          XTH.conT (XTH.mkName_ "Double")
+        UUIDT ->
+          XTH.conT (XTH.mkName_ "Data.UUID.UUID")
+        DateT ->
+          XTH.conT (XTH.mkName_ "Data.Time.Day")
+        DateTimeT ->
+          XTH.conT (XTH.mkName_ "Data.Time.LocalTime")
     ListT t2 ->
       XTH.listT_ (genTypeV1 t2)
     MaybeT t2 ->

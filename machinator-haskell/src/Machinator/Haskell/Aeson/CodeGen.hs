@@ -111,6 +111,16 @@ typeToJson ty =
           toJson_
         M.IntT ->
           toJson_
+        M.LongT ->
+          toJson_
+        M.DoubleT ->
+          toJson_
+        M.UUIDT ->
+          toJson_
+        M.DateT ->
+          toJson_
+        M.DateTimeT ->
+          toJson_
 
 generateFromJsonNameV1 :: M.Name -> TH.Name
 generateFromJsonNameV1 (M.Name n) =
@@ -183,6 +193,17 @@ typeFromJson ty =
           parseJson_
         M.IntT ->
           parseJson_
+        M.LongT ->
+          parseJson_
+        M.DoubleT ->
+          parseJson_
+        M.UUIDT ->
+          parseJson_
+        M.DateT ->
+          parseJson_
+        M.DateTimeT ->
+          parseJson_
+
 -- -----------------------------------------------------------------------------
 
 object :: [Exp] -> Exp

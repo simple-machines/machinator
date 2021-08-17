@@ -238,13 +238,7 @@ types' v = do
     _ ->
       case groundFromName x of
         Just t ->
-          case t of
-            StringT ->
-              hasFeature v HasStrings *> pure (GroundT t)
-            BoolT ->
-              hasFeature v HasBools *> pure (GroundT t)
-            IntT ->
-              pure (GroundT t)
+          pure (GroundT t)
         Nothing ->
           pure (Variable x)
 

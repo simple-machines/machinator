@@ -53,6 +53,8 @@ renderModule mn@(ModuleName n) imports defs =
     , "{-# OPTIONS_GHC -fno-warn-unused-imports #-}"
     , T.unwords ["module", n, "where"]
     , "import Data.Text (Text)"
+    , "import qualified Data.Time"
+    , "import qualified Data.UUID"
     , maybe mempty (T.unlines . fmap renderImport . toList) (M.lookup mn imports)
     , T.unlines (fmap (T.pack . TH.pprint . genTypesV1) defs)
     ]

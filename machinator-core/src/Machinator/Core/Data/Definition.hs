@@ -76,6 +76,11 @@ data Ground
   = StringT
   | BoolT
   | IntT
+  | LongT
+  | DoubleT
+  | UUIDT
+  | DateT
+  | DateTimeT
   deriving (Eq, Ord, Show, Data, Typeable, Generic)
 
 -- | Obtain the stringy form for a ground type.
@@ -88,6 +93,16 @@ groundToName g =
       Name "Bool"
     IntT ->
       Name "Int"
+    LongT ->
+      Name "Long"
+    DoubleT ->
+      Name "Double"
+    UUIDT ->
+      Name "UUID"
+    DateT ->
+      Name "Date"
+    DateTimeT ->
+      Name "DateTime"
 
 -- | Obtain the ground type for a stringy name.
 groundFromName :: Alternative f => Name -> f Ground
@@ -99,6 +114,16 @@ groundFromName n =
       pure BoolT
     "Int" ->
       pure IntT
+    "Long" ->
+      pure LongT
+    "Double" ->
+      pure DoubleT
+    "UUID" ->
+      pure UUIDT
+    "Date" ->
+      pure DateT
+    "DateTime" ->
+      pure DateTimeT
     _ ->
       empty
 

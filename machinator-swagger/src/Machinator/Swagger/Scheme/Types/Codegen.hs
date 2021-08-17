@@ -13,7 +13,6 @@ import           Control.Lens ((?~), (.~))
 
 import qualified Data.List.NonEmpty as NonEmpty
 import qualified Data.List as List
-import           Data.Proxy (Proxy (..))
 import qualified Data.Text as Text
 
 import           Data.OpenApi
@@ -77,16 +76,7 @@ genNewtype wrappedType =
           mempty
             & allOf ?~ [genTypeV1 var]
         GroundT g ->
-          case g of
-            StringT ->
-              mempty
-              & type_ ?~ OpenApiString
-            BoolT ->
-              mempty
-              & type_ ?~ OpenApiBoolean
-            IntT ->
-              mempty
-              & type_ ?~ OpenApiInteger
+          genGroundSchema g
         ListT t2 -> do
           mempty
             & type_ ?~ OpenApiArray
@@ -106,20 +96,14 @@ makeRef n s = do
   return (Ref (Reference n))
 
 
-
 genTypeV1 :: Type -> Referenced Schema
 genTypeV1 ty =
   case ty of
     Variable (Name n) ->
       Ref (Reference n)
     GroundT g ->
-      case g of
-        StringT ->
-          Inline $ paramSchemaToSchema (Proxy :: Proxy Text)
-        BoolT ->
-          Inline $ paramSchemaToSchema (Proxy :: Proxy Bool)
-        IntT ->
-          Inline $ paramSchemaToSchema (Proxy :: Proxy Int)
+      Inline $
+        genGroundSchema g
     ListT t2 -> do
       Inline
         $ mempty
@@ -128,6 +112,43 @@ genTypeV1 ty =
 
     MaybeT t2 ->
       genTypeV1 t2
+
+
+genGroundSchema :: Ground -> Schema
+genGroundSchema g =
+  case g of
+    StringT ->
+      mempty
+        & type_ ?~ OpenApiString
+    BoolT ->
+      mempty
+        & type_ ?~ OpenApiBoolean
+    IntT ->
+      mempty
+        & type_ ?~ OpenApiInteger
+        & format ?~ "int32"
+    LongT ->
+      mempty
+        & type_ ?~ OpenApiInteger
+        & format ?~ "int64"
+    DoubleT ->
+      mempty
+        & type_ ?~ OpenApiNumber
+        & format ?~ "double"
+    UUIDT ->
+      mempty
+        & type_ ?~ OpenApiString
+        & format ?~ "uuid"
+    DateT ->
+      mempty
+        & description ?~ "A date as per RFC 3339"
+        & format ?~ "date"
+        & type_ ?~ OpenApiString
+    DateTimeT ->
+      mempty
+        & description ?~ "A date time as per RFC 3339"
+        & format ?~ "date-time"
+        & type_ ?~ OpenApiString
 
 isMaybeT :: Type -> Bool
 isMaybeT ty =

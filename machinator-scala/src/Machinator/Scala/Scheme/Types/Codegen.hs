@@ -48,6 +48,16 @@ genTypeV1 ty =
           text "Boolean"
         IntT ->
           text "Int"
+        LongT ->
+          text "Long"
+        DoubleT ->
+          text "Double"
+        UUIDT ->
+          text "java.util.UUID"
+        DateT ->
+          text "java.time.LocalDate"
+        DateTimeT ->
+          text "java.time.Instant"
     ListT t2 ->
       string "List" <> WL.brackets (genTypeV1 t2)
     MaybeT t2 ->
