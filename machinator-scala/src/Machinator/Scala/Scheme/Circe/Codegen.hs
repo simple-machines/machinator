@@ -65,7 +65,7 @@ generateToJsonV1 (M.Definition (M.Name tn) typ) =
                       (text n <> WL.tupled (with fts $ \(M.Name fn, _) -> text fn))
                       ( object $
                           field "adt_type" (text "io.circe.Json.fromString" <> WL.parens (WL.dquotes (makeDiscriminator tn n))) :
-                          with fts (\(M.Name fn, f'typ) -> field n (text "io.circe.Encoder" <> WL.brackets (genTypeV1 f'typ) <> text ".apply" <> WL.parens (text fn)))
+                          with fts (\(M.Name fn, f'typ) -> field fn (text "io.circe.Encoder" <> WL.brackets (genTypeV1 f'typ) <> text ".apply" <> WL.parens (text fn)))
                       )
           M.Record fts ->
             case_expr
