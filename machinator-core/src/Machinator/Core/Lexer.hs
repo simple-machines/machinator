@@ -22,6 +22,7 @@ import qualified Text.Megaparsec.Char.Lexer as ML
 import qualified Text.Megaparsec.Char as M
 import qualified Text.Megaparsec as M
 import           Text.Megaparsec.Error (errorBundlePretty)
+import qualified Text.Megaparsec.Byte as C
 
 type Parser = M.Parsec Void Text
 
@@ -80,6 +81,7 @@ token' =
     , M.try $
         string (T.unpack newtypeKeyword) *> M.spaceChar
           $> TNewtype
+    , docComment
     , string "=" $> TEquals
     , string "|" $> TChoice
     , string "(" $> TLParen
@@ -95,10 +97,41 @@ comment :: MachinatorVersion -> Parser ()
 comment v =
   when (featureEnabled v HasComments) $
     void . many $ M.choice [
-        ML.skipBlockCommentNested "{-" "-}"
-      , ML.skipLineComment "--"
+        skipNotDocBlockCommentNested
+      , singleNotDocLineComment
       , void M.spaceChar
       ]
+
+docComment :: Parser Token
+docComment =
+  singleDocComment <|> multiDocComment
+
+singleDocComment :: Parser Token
+singleDocComment = do
+  M.try (string "--" <* M.space <* M.char '|')
+  s <- M.takeWhileP (Just "character") (/= '\n')
+  pure (TDoc s)
+
+singleNotDocLineComment :: Parser ()
+singleNotDocLineComment = do
+  M.try (string "--" *> M.notFollowedBy (M.space *> C.string "|"))
+  void (M.takeWhileP (Just "character") (/= '\n'))
+
+multiDocComment :: Parser Token
+multiDocComment = do
+  M.try (string "{-" <* M.space <* M.char '|')
+  s <- M.manyTill M.anySingle (C.string "-}")
+  pure (TDoc (T.pack s))
+{-# INLINEABLE multiDocComment #-}
+
+skipNotDocBlockCommentNested :: Parser ()
+skipNotDocBlockCommentNested = p *> void (M.manyTill e n)
+  where
+    e = ML.skipBlockCommentNested "{-" "-}" <|> void M.anySingle
+    p = M.try (C.string "{-" *> M.notFollowedBy (M.space *> C.string "|"))
+    n = C.string "-}"
+{-# INLINEABLE skipNotDocBlockCommentNested #-}
+
 
 ident :: Parser Token
 ident = do

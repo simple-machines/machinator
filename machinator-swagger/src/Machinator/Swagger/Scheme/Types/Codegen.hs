@@ -27,14 +27,14 @@ import           P
 
 -- | Generates a type declaration for the given definition.
 genTypesV1 :: Definition -> Declare (Definitions Schema) (Referenced Schema)
-genTypesV1 (Definition (Name parent) dec) =
+genTypesV1 (Definition (Name parent) mDoc dec) =
   case dec of
     Variant cs -> do
       (discriminators, oneOfs) <-
         fmap List.unzip $
-          for (NonEmpty.toList cs) $ \(Name constructor, fields) -> do
+          for (NonEmpty.toList cs) $ \(Name constructor, vDoc, fields) -> do
             ref <- makeRef constructor $
-              genRecordV1 fields
+              genRecordV1 vDoc fields
 
             return ((makeDiscriminator parent constructor, makeRelativeRef constructor), ref)
 
@@ -43,17 +43,18 @@ genTypesV1 (Definition (Name parent) dec) =
           & type_ ?~ OpenApiObject
           & oneOf ?~ oneOfs
           & discriminator ?~ Discriminator "adt_type" (Exts.fromList discriminators)
+          & description .~ (docText <$> mDoc)
 
     Record fts ->
       makeRef parent $
-        genRecordV1 fts
+        genRecordV1 mDoc fts
 
     Newtype (_, ft) ->
       makeRef parent $
-        genNewtype ft
+        genNewtype mDoc ft
 
-genRecordV1 :: [(Name, Type)] -> Schema
-genRecordV1 fts =
+genRecordV1 :: Maybe Docs -> [(Name, Type)] -> Schema
+genRecordV1 vDoc fts =
   let
     props =
       bimap unName genTypeV1 <$> fts
@@ -65,25 +66,28 @@ genRecordV1 fts =
       & type_      ?~ OpenApiObject
       & properties .~ Exts.fromList props
       & required   .~ reqs
+      & description .~ (docText <$> vDoc)
 
-
-genNewtype :: Type -> Schema
-genNewtype wrappedType =
+genNewtype :: Maybe Docs ->  Type -> Schema
+genNewtype nDoc wrappedType =
   let
     openWrappedType =
       case wrappedType of
         var@Variable {} ->
           mempty
             & allOf ?~ [genTypeV1 var]
+            & description .~ (docText <$> nDoc)
         GroundT g ->
           genGroundSchema g
+            & description .~ (docText <$> nDoc)
         ListT t2 -> do
           mempty
             & type_ ?~ OpenApiArray
             & items ?~ OpenApiItemsObject (genTypeV1 t2)
+            & description .~ (docText <$> nDoc)
 
         MaybeT t2 ->
-          genNewtype t2
+          genNewtype nDoc t2
             & nullable ?~ True
 
   in

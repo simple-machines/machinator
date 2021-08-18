@@ -25,18 +25,18 @@ import qualified X.Language.Haskell.TH.Syntax as XTH
 
 -- | Generate a TH type declaration from a Machinator 'Definition'.
 genTypesV1 :: Definition -> TH.Dec
-genTypesV1 (Definition nn@(Name n) d) =
+genTypesV1 (Definition nn@(Name n) _ d) =
   case d of
     Variant nts ->
-      XTH.data_ (XTH.mkName_ n) [] (fmap (uncurry genConV1) (toList nts))
+      XTH.data_ (XTH.mkName_ n) [] (fmap (uncurry3 genConV1) (toList nts))
     Record fts ->
       XTH.data_ (XTH.mkName_ n) [] [genRecV1 nn fts]
     Newtype fts ->
       TH.NewtypeD [] (XTH.mkName_ n) [] Nothing (genNtV1 nn fts) []
 
 -- | Generate a regular variant constructor.
-genConV1 :: Name -> [(Name, Type)] -> TH.Con
-genConV1 (Name n) ts =
+genConV1 :: Name -> Maybe Docs -> [(Name, Type)] -> TH.Con
+genConV1 (Name n) _ ts =
   XTH.normalC_' (XTH.mkName_ n) (fmap (genTypeV1 . snd) ts)
 
 -- | Generate a record constructor.
@@ -88,3 +88,8 @@ genTypeV1 ty =
       XTH.listT_ (genTypeV1 t2)
     MaybeT t2 ->
       XTH.appT (XTH.conT (XTH.mkName_ "Maybe")) (genTypeV1 t2)
+
+
+-- | Converts a curried function to a function on a triple.
+uncurry3 :: (a -> b -> c -> d) -> ((a, b, c) -> d)
+uncurry3 f ~(a,b,c) = f a b c

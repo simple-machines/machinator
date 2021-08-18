@@ -22,12 +22,25 @@ import qualified Text.PrettyPrint.Annotated.WL as WL
 
 -- | Generates a type declaration for the given definition.
 genTypesV1 :: Definition -> Text
-genTypesV1 (Definition name@(Name n) dec) =
-  renderText $ case dec of
+genTypesV1 def@(Definition _ mDoc _) =
+  renderText $
+    case mDoc of
+      Just (Docs docs) ->
+        WL.vsep [
+          simpleComment docs
+        , genTypesV1' def
+        ]
+      Nothing ->
+        genTypesV1' def
+
+-- | Generates a type declaration for the given definition.
+genTypesV1' :: Definition -> Doc a
+genTypesV1' (Definition name@(Name n) _ dec) =
+  case dec of
     Variant (c1 :| cts) ->
       WL.vsep $
           string "sealed trait" <+> text n
-        : fmap (uncurry (genConstructorV1 name)) (c1:cts)
+        : fmap (uncurry3 (genConstructorV1 name)) (c1:cts)
 
     Record fts ->
       genRecordV1 name fts
@@ -63,9 +76,15 @@ genTypeV1 ty =
     MaybeT t2 ->
       string "Option" <> WL.brackets (genTypeV1 t2)
 
-genConstructorV1 :: Name -> Name -> [(Name, Type)] -> Doc a
-genConstructorV1 (Name extends) constructorName tys =
-  genRecordV1 constructorName tys <+> text "extends" <+> text extends
+genConstructorV1 :: Name -> Name -> Maybe Docs -> [(Name, Type)] -> Doc a
+genConstructorV1 (Name extends) constructorName mDoc tys =
+  let
+    built = genRecordV1 constructorName tys <+> text "extends" <+> text extends
+  in case mDoc of
+    Just (Docs docs) ->
+      WL.vsep [ simpleComment docs, built ]
+    Nothing ->
+      built
 
 -- | Generates a naked record for the given definition.
 --
@@ -97,4 +116,18 @@ text =
 
 renderText :: Doc a -> Text
 renderText =
-  TL.toStrict . WL.displayT . WL.renderPrettyDefault
+  TL.toStrict . WL.displayT . WL.renderPretty 0.8 100
+
+
+simpleComment :: Text -> Doc a
+simpleComment docs = do
+  let open  = WL.flatAlt "/* " "// "
+  let close = WL.flatAlt (WL.line <> " */") ""
+  let trimmed = T.stripEnd (T.unlines (T.strip <$> T.lines docs))
+  WL.group $
+    open <> WL.align (WL.pretty trimmed) <> close
+
+
+-- | Converts a curried function to a function on a triple.
+uncurry3 :: (a -> b -> c -> d) -> ((a, b, c) -> d)
+uncurry3 f ~(a,b,c) = f a b c

@@ -12,6 +12,7 @@ module Machinator.Core.Data.Definition (
   , Definition (..)
   , DefinitionFileGraph (..)
   -- * Datatype types
+  , Docs (..)
   , Name (..)
   , Type (..)
   , Ground (..)
@@ -43,9 +44,16 @@ data DefinitionFile
     , definitionFileDefinitions :: [Definition]
     } deriving (Eq, Ord, Show, Data, Typeable, Generic)
 
+
+newtype Docs = Docs {
+    docText :: Text
+  } deriving (Eq, Ord, Show, Data, Typeable, Generic)
+
+
 -- | A single data definition.
 data Definition = Definition {
      defName :: Name
+   , defDoc  :: Maybe Docs
    , defType :: DataType
    } deriving (Eq, Ord, Show, Data, Typeable, Generic)
 
@@ -129,7 +137,7 @@ groundFromName n =
 
 -- | Declarable datatypes, e.g. sums or records.
 data DataType
-  = Variant (NonEmpty (Name, [(Name, Type)]))
+  = Variant (NonEmpty (Name, Maybe Docs, [(Name, Type)]))
   | Record [(Name, Type)]
   | Newtype (Name, Type)
   deriving (Eq, Ord, Show, Data, Typeable, Generic)
@@ -140,7 +148,7 @@ free :: DataType -> Set Name
 free d =
   case d of
     Variant nts ->
-      fold . with nts $ \(_, fts) ->
+      fold . with nts $ \(_, _, fts) ->
         S.fromList . catMaybes . with fts $ \(_, t) -> freeInType t
     Record fts ->
       S.fromList . catMaybes . with fts $ \(_, t) -> freeInType t

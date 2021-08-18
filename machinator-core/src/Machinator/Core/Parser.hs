@@ -171,31 +171,44 @@ parseVersioned file v = do
   ds <- many (definition v)
   pure (Versioned v (DefinitionFile file ds))
 
+
+docComment :: Parser Docs
+docComment = do
+  TDoc x <- satisfy (\case TDoc _ -> True; _ -> False)
+  pure (Docs x)
+
+
 definition :: MachinatorVersion -> Parser Definition
 definition v =
-      record v
-  <|> variant v
-  <|> newtype' v
+  optional docComment >>= definition' v
 
 
-variant :: MachinatorVersion -> Parser Definition
-variant v = do
+definition' :: MachinatorVersion -> Maybe Docs -> Parser Definition
+definition' v doc =
+      record v doc
+  <|> variant v doc
+  <|> newtype' v doc
+
+
+variant :: MachinatorVersion -> Maybe Docs -> Parser Definition
+variant v doc = do
   hasFeature v HasVariants
   M.try (token TData)
   x <- ident
   token TEquals
   cs <- sepBy1 (alternative v) (token TChoice)
-  pure (Definition x (Variant cs))
+  pure (Definition x doc (Variant cs))
 
-alternative :: MachinatorVersion -> Parser (Name, [(Name, Type)])
+alternative :: MachinatorVersion -> Parser (Name, Maybe Docs, [(Name, Type)])
 alternative v = do
+  mDoc <- optional docComment
   name <- ident
   ts   <- optional $ do
     token TLBrace *> sepBy (recordField v) (token TComma) <* token TRBrace
-  pure (name, fold ts)
+  pure (name, mDoc, fold ts)
 
-record :: MachinatorVersion -> Parser Definition
-record v = do
+record :: MachinatorVersion -> Maybe Docs -> Parser Definition
+record v doc = do
   hasFeature v HasRecords
   M.try (token TRecord)
   x <- ident
@@ -203,10 +216,10 @@ record v = do
   token TLBrace
   fts <- sepBy (recordField v) (token TComma)
   token TRBrace
-  pure (Definition x (Record fts))
+  pure (Definition x doc (Record fts))
 
-newtype' :: MachinatorVersion -> Parser Definition
-newtype' v = do
+newtype' :: MachinatorVersion -> Maybe Docs -> Parser Definition
+newtype' v doc = do
   hasFeature v HasRecords
   M.try (token TNewtype)
   x <- ident
@@ -214,7 +227,7 @@ newtype' v = do
   token TLBrace
   ft <- recordField v
   token TRBrace
-  pure (Definition x (Newtype ft))
+  pure (Definition x doc (Newtype ft))
 
 recordField :: MachinatorVersion -> Parser (Name, Type)
 recordField v = do

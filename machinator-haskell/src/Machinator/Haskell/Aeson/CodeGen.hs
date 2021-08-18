@@ -38,7 +38,7 @@ generateAesonModuleV1 defs =
 
 generateAesonV1 :: [M.Definition] -> [Dec]
 generateAesonV1 defs =
-  fold . flip fmap defs $ \def@(M.Definition n _ty) -> [
+  fold . flip fmap defs $ \def@(M.Definition n _doc _ty) -> [
       generateToJsonSigV1 n
     , XTH.val_ (XTH.varP (generateToJsonNameV1 n)) (generateToJsonV1 def)
     , generateFromJsonSigV1 n
@@ -55,12 +55,12 @@ generateToJsonSigV1 tn@(M.Name n) =
   XTH.sig (generateToJsonNameV1 tn) (XTH.arrowT_ (XTH.conT (XTH.mkName_ n)) (XTH.conT (XTH.mkName_ "Data.Aeson.Value")))
 
 generateToJsonV1 :: M.Definition -> Exp
-generateToJsonV1 (M.Definition (M.Name tn) typ) =
+generateToJsonV1 (M.Definition (M.Name tn) _ typ) =
   XTH.lamE [XTH.varP (TH.mkName "x")] $
     case typ of
       M.Variant cts ->
         XTH.caseE (XTH.varE (TH.mkName "x")) $
-          flip fmap (toList cts) $ \(M.Name n, fts) ->
+          flip fmap (toList cts) $ \(M.Name n, _vDoc, fts) ->
             let
               pats = fmap (T.unpack . M.unName . fst) fts
             in
@@ -137,7 +137,7 @@ generateFromJsonSigV1 tn@(M.Name n) =
       (XTH.appT (XTH.conT (XTH.mkName_ "Data.Aeson.Types.Parser")) (XTH.conT (XTH.mkName_ n))))
 
 generateFromJsonV1 :: M.Definition -> Exp
-generateFromJsonV1 (M.Definition tn@(M.Name n) typ) =
+generateFromJsonV1 (M.Definition tn@(M.Name n) _ typ) =
   XTH.lamE [XTH.varP (TH.mkName "x")] $
     case typ of
       M.Variant cts ->
@@ -150,7 +150,7 @@ generateFromJsonV1 (M.Definition tn@(M.Name n) typ) =
                     let
                       matchTag s = XTH.match_ (TH.LitP (XTH.stringL_ s))
                     in
-                      flip fmap (toList cts) $ \(cn@(M.Name cnn), fts) ->
+                      flip fmap (toList cts) $ \(cn@(M.Name cnn), _doc, fts) ->
                         matchTag cnn (fromJsonFields cn (fmap (first (T.unpack . M.unName)) fts))
               ]
       M.Record fts ->

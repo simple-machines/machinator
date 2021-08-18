@@ -32,7 +32,7 @@ generateCirceV1 defs =
 
 
 generateToJsonV1Companion :: M.Definition -> Text
-generateToJsonV1Companion def@(M.Definition (M.Name tn) _) =
+generateToJsonV1Companion def@(M.Definition (M.Name tn) _ _) =
   renderText $
     text "object" <+> text tn <+>
       code_block [
@@ -42,7 +42,7 @@ generateToJsonV1Companion def@(M.Definition (M.Name tn) _) =
 
 
 generateToJsonV1 :: M.Definition -> Doc a
-generateToJsonV1 (M.Definition (M.Name tn) typ) =
+generateToJsonV1 (M.Definition (M.Name tn) _ typ) =
   text "implicit val"
     <+> text tn <> text "Encoder" <> text ":"
     <+> text "io.circe.Encoder" <> WL.brackets (text tn)
@@ -51,7 +51,7 @@ generateToJsonV1 (M.Definition (M.Name tn) typ) =
       [ case typ of
           M.Variant cts ->
             WL.vsep $
-              with (toList cts) $ \(M.Name n, fts) ->
+              with (toList cts) $ \(M.Name n, _, fts) ->
                 case fts of
                   [] ->
                     case_expr
@@ -81,7 +81,7 @@ generateToJsonV1 (M.Definition (M.Name tn) typ) =
 
 
 generateFromJsonV1 :: M.Definition -> Doc a
-generateFromJsonV1 (M.Definition (M.Name tn) typ) =
+generateFromJsonV1 (M.Definition (M.Name tn) _ typ) =
   text "implicit val"
     <+> text tn
     <> text "Decoder"
@@ -99,7 +99,7 @@ generateFromJsonV1 (M.Definition (M.Name tn) typ) =
                     <+> code_block
                       ( with
                           (toList cts)
-                          ( \(M.Name n, fts) ->
+                          ( \(M.Name n, _, fts) ->
                               case_expr
                                 (WL.dquotes (makeDiscriminator tn n))
                                 ( case fts of

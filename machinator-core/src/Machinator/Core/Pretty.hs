@@ -62,7 +62,7 @@ ppVersion v =
     text "-- machinator @ v" WL.<> WL.int (versionToNumber v)
 
 ppDefinition' :: Definition -> Doc SyntaxAnnotation
-ppDefinition' (Definition n ty) =
+ppDefinition' (Definition n _ ty) =
   case ty of
     Variant cs ->
       ppVariant n cs
@@ -71,7 +71,7 @@ ppDefinition' (Definition n ty) =
     Newtype ft ->
       ppNewtype n ft
 
-ppVariant :: Name -> NonEmpty (Name, [(Name, Type)]) -> Doc SyntaxAnnotation
+ppVariant :: Name -> NonEmpty (Name, Maybe Docs, [(Name, Type)]) -> Doc SyntaxAnnotation
 ppVariant (Name n) cs =
   WL.hang
     2
@@ -83,10 +83,10 @@ ppVariant (Name n) cs =
        (text " ")
        (WL.punctuate
           (WL.linebreak WL.<> punctuation "|")
-          (NE.toList (fmap (uncurry ppConstructor) cs))))
+          (NE.toList (fmap (uncurry3 ppConstructor) cs))))
 
-ppConstructor :: Name -> [(Name, Type)] -> Doc SyntaxAnnotation
-ppConstructor nn@(Name n) ts =
+ppConstructor :: Name -> Maybe Docs -> [(Name, Type)] -> Doc SyntaxAnnotation
+ppConstructor nn@(Name n) _ ts =
   WL.hang
     2
     (WL.annotate (ConstructorDefinition n) (ppName nn) WL.<>
@@ -186,3 +186,7 @@ prettyDecorated start end =
 prettyUndecorated :: Doc a -> Text
 prettyUndecorated =
   prettyDecorated (const mempty) (const mempty)
+
+-- | Converts a curried function to a function on a triple.
+uncurry3 :: (a -> b -> c -> d) -> ((a, b, c) -> d)
+uncurry3 f ~(a,b,c) = f a b c

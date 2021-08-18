@@ -14,6 +14,7 @@ import           P
 data Token
   = TData
   | TIdent Text
+  | TDoc Text
   | TEquals
   | TChoice
   | TLParen
