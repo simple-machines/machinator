@@ -1,5 +1,6 @@
 -- machinator @ v2
 
+{- | What is this -}
 data Feature
  = EventFeature {
     id: FeatureId,

@@ -1,5 +1,6 @@
 packages: machinator-core/
           machinator-haskell/
+          machinator-python/
           machinator-scala/
           machinator-swagger/
           lib/disorder/disorder-aeson

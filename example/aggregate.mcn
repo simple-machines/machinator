@@ -1,5 +1,7 @@
 -- machinator @ v2
+{-- A file -}
 
+{- | Aggregations to apply to query results. -}
 data AggregateExpression
-  = Sum {}
-  | Average {}
+  = Sum
+  | Average

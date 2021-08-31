@@ -1,0 +1,106 @@
+name:                  ambiata-machinator-python
+version:               1.0.0
+license:               BSD3
+author:                Ambiata <info@ambiata.com>
+maintainer:            Ambiata <info@ambiata.com>
+copyright:             (c) 2017 Ambiata.
+synopsis:              ambiata-machinator-python
+category:              System
+cabal-version:         >= 1.8
+build-type:            Simple
+description:           ambiata-machinator-python
+
+library
+  build-depends:
+                       base                            >= 3          && < 5
+                     , ambiata-machinator-core
+                     , ambiata-p
+                     , ambiata-x-eithert
+                     , containers
+                     , filepath                        == 1.4.*
+                     , semigroups                      == 0.18.*
+                     , text                            == 1.2.*
+                     , transformers                    >= 0.4        && < 0.7
+                     , wl-pprint-annotated             == 0.1.*
+
+  ghc-options:
+                       -Wall
+
+  hs-source-dirs:
+                       src
+
+  exposed-modules:
+                       Machinator.Python
+                       Machinator.Python.Data.Types
+                       Machinator.Python.Scheme.Types
+                       Machinator.Python.Scheme.Types.Codegen
+
+
+executable gen-python
+  hs-source-dirs:      main
+  main-is:             Main.hs
+  ghc-options:         -Wall -threaded -O2
+
+  build-depends:
+                       base                            >= 3          && < 5
+                     , ambiata-machinator-core
+                     , ambiata-machinator-python
+                     , ambiata-p
+                     , ambiata-x-eithert
+                     , ambiata-x-optparse
+                     , optparse-applicative            >= 0.10       && < 1.0
+                     , text                            == 1.2.*
+                     , transformers                    >= 0.4        && < 0.7
+                     , directory                       == 1.3.*
+
+
+
+
+test-suite test
+  type:                exitcode-stdio-1.0
+
+  main-is:             test.hs
+
+  ghc-options:         -Wall -threaded -O2
+
+  hs-source-dirs:
+                       test
+
+  build-depends:
+                       base                            >= 3          && < 5
+                     , ambiata-disorder-core
+                     , ambiata-disorder-corpus
+                     , ambiata-disorder-jack
+                     , ambiata-p
+                     , ambiata-machinator-core
+                     , QuickCheck                      >= 2.8.2      && < 2.9
+                     , quickcheck-instances            == 0.3.*
+                     , semigroups
+                     , text
+
+test-suite test-io
+  type:                exitcode-stdio-1.0
+
+  main-is:             test-io.hs
+
+  ghc-options:         -Wall -threaded -O2
+
+  hs-source-dirs:
+                       test
+
+  build-depends:
+                       base                            >= 3          && < 5
+                     , ambiata-disorder-core
+                     , ambiata-disorder-corpus
+                     , ambiata-disorder-jack  
+                     , ambiata-p
+                     , ambiata-machinator-core
+                     , ambiata-machinator-core-test
+                     , QuickCheck                      >= 2.8.2      && < 2.9
+                     , quickcheck-instances            == 0.3.*
+                     , semigroups
+                     , text
+                     , directory
+                     , filepath
+                     , temporary                       == 1.2.*
+                     , process

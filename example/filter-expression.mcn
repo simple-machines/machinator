@@ -1,3 +1,9 @@
 -- machinator @ v2
 
 record FilterExpression = { sql: String }
+
+
+{- | This is an example.
+     In Python, we just treat newtypes as synonyms.
+-}
+newtype Foo = { foo: int }
