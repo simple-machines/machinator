@@ -1,0 +1,3 @@
+-- machinator @ v2
+
+record FilterExpression = { sql: String }

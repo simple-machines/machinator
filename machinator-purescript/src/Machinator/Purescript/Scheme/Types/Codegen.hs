@@ -42,12 +42,16 @@ genTypeV1 ty =
           text "String"
         BoolT ->
           text "Boolean"
+        IntT ->
+          text "Int"
     ListT t2 ->
       WL.parens (string "Array" <+> genTypeV1 t2)
+    MaybeT t2 ->
+      WL.parens (string "Maybe" <+> genTypeV1 t2)
 
-genConstructorV1 :: Name -> [Type] -> Doc a
+genConstructorV1 :: Name -> [(Name, Type)] -> Doc a
 genConstructorV1 (Name n) tys =
-  text n <+> WL.hsep (fmap genTypeV1 tys)
+  text n <+> WL.hsep (fmap (genTypeV1 . snd) tys)
 
 -- | Generates a naked record for the given definition.
 --

@@ -1,11 +1,6 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TupleSections #-}
-module Machinator.Haskell.Scheme.Types (
-    types
-  , typesV1
-  ) where
+module Machinator.Scala.Scheme.Types where
 
 
 import qualified Data.Char as Char
@@ -17,10 +12,9 @@ import qualified Data.Text as T
 
 import           Machinator.Core
 import qualified Machinator.Core.Graph as MG
-import           Machinator.Haskell.Data.Types
-import           Machinator.Haskell.TH.Types
-
-import qualified Language.Haskell.TH as TH
+import           Machinator.Scala.Data.Types
+import qualified Machinator.Scala.Scheme.Circe.Codegen as Codegen
+import qualified Machinator.Scala.Scheme.Types.Codegen as Codegen
 
 import           P
 
@@ -28,13 +22,13 @@ import qualified System.FilePath.Posix as FilePath
 import           System.IO (FilePath)
 
 
-types :: HaskellTypesVersion -> [DefinitionFile] -> Either HaskellTypesError [(FilePath, Text)]
+types :: ScalaTypesVersion -> [DefinitionFile] -> Either ScalaTypesError [(FilePath, Text)]
 types v ds =
   case v of
-    HaskellTypesV1 ->
+    ScalaTypesV1 ->
       typesV1 ds
 
-typesV1 :: [DefinitionFile] -> Either HaskellTypesError [(FilePath, Text)]
+typesV1 :: [DefinitionFile] -> Either ScalaTypesError [(FilePath, Text)]
 typesV1 dfs =
   let DefinitionFileGraph fg = MG.buildFileGraph dfs
       mg = M.mapKeys filePathToModuleName (fmap (S.map filePathToModuleName) fg)
@@ -44,24 +38,19 @@ typesV1 dfs =
 
 -- -----------------------------------------------------------------------------
 
--- Extremely shoddy codegen for v0 purposes
 renderModule :: ModuleName -> Map ModuleName (Set ModuleName) -> [Definition] -> Text
 renderModule mn@(ModuleName n) imports defs =
   T.unlines [
-      "{-# LANGUAGE NoImplicitPrelude #-}"
-    , "{-# LANGUAGE OverloadedStrings #-}"
-    , "{-# OPTIONS_GHC -fno-warn-unused-imports #-}"
-    , T.unwords ["module", n, "where"]
-    , "import Data.Text (Text)"
-    , "import qualified Data.Time"
-    , "import qualified Data.UUID"
+      T.unwords ["package", n]
     , maybe mempty (T.unlines . fmap renderImport . toList) (M.lookup mn imports)
-    , T.unlines (fmap (T.pack . TH.pprint . genTypesV1) defs)
+    , T.unlines . with defs $ \def ->
+        Codegen.genTypesV1 def <> "\n" <> Codegen.generateToJsonV1Companion def
     ]
 
 renderImport :: ModuleName -> Text
 renderImport (ModuleName n) =
   "import " <> n
+
 
 -- -----------------------------------------------------------------------------
 
@@ -69,7 +58,6 @@ newtype ModuleName = ModuleName {
     _unModuleName :: Text
   } deriving (Eq, Ord, Show)
 
--- TODO I don't know if this logic belongs here.
 
 -- | Derive a module name from the relative 'FilePath'.
 --
@@ -77,6 +65,8 @@ newtype ModuleName = ModuleName {
 -- λ> filePathToModuleName "./path_to/my/favourite_Template_place.hs"
 -- ModuleName {unModuleName = "PathTo.My.FavouriteTemplatePlace"}
 -- @
+--
+-- TODO V2 Accept an alternative function as a parameter.
 filePathToModuleName :: FilePath -> ModuleName
 filePathToModuleName =
   ModuleName . T.pack . goUpper . FilePath.dropExtension
@@ -93,4 +83,4 @@ filePathToModuleName =
 
 genFileName :: ModuleName -> FilePath
 genFileName (ModuleName n) =
-  T.unpack (T.replace "." "/" n) <> ".hs"
+  T.unpack (T.replace "." "/" n) <> ".scala"

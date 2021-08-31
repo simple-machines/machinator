@@ -49,4 +49,4 @@ renderMachinatorError me =
 -- The 'FilePath' is for error reporting only.
 parseDefinitionFile :: FilePath -> Text -> Either MachinatorError (Versioned DefinitionFile)
 parseDefinitionFile file t =
-  first MLexError (Lexer.lexVersioned file t) >>= first MParseError . Parser.parseDefinitionFile file
+  first MLexError (Lexer.lexVersioned file t) >>= first MParseError . Parser.parseDefinitionFile file t

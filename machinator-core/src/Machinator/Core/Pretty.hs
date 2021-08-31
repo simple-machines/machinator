@@ -62,33 +62,35 @@ ppVersion v =
     text "-- machinator @ v" WL.<> WL.int (versionToNumber v)
 
 ppDefinition' :: Definition -> Doc SyntaxAnnotation
-ppDefinition' (Definition n ty) =
+ppDefinition' (Definition n _ ty) =
   case ty of
     Variant cs ->
       ppVariant n cs
     Record fts ->
       ppRecord n fts
+    Newtype ft ->
+      ppNewtype n ft
 
-ppVariant :: Name -> NonEmpty (Name, [Type]) -> Doc SyntaxAnnotation
+ppVariant :: Name -> NonEmpty (Name, Maybe Docs, [(Name, Type)]) -> Doc SyntaxAnnotation
 ppVariant (Name n) cs =
   WL.hang
     2
     (keyword "data" <+>
      WL.annotate (TypeDefinition n) (text n) <+>
      punctuation "=" WL.<$$>
-     (foldl'
-        (<+>)
-        (text " ")
-        (WL.punctuate
-           (WL.linebreak WL.<> punctuation "|")
-           (NE.toList (fmap (uncurry ppConstructor) cs)))))
+     foldl'
+       (<+>)
+       (text " ")
+       (WL.punctuate
+          (WL.linebreak WL.<> punctuation "|")
+          (NE.toList (fmap (uncurry3 ppConstructor) cs))))
 
-ppConstructor :: Name -> [Type] -> Doc SyntaxAnnotation
-ppConstructor nn@(Name n) ts =
+ppConstructor :: Name -> Maybe Docs -> [(Name, Type)] -> Doc SyntaxAnnotation
+ppConstructor nn@(Name n) _ ts =
   WL.hang
     2
     (WL.annotate (ConstructorDefinition n) (ppName nn) WL.<>
-     foldl' (<+>) WL.empty (fmap (ppType 11) ts))
+     foldl' (<+>) WL.empty (fmap (uncurry (ppRecordField nn)) ts))
 
 ppRecord :: Name -> [(Name, Type)] -> Doc SyntaxAnnotation
 ppRecord nn@(Name n) fts =
@@ -106,6 +108,18 @@ ppRecord nn@(Name n) fts =
           (fmap (uncurry (ppRecordField nn)) fts)) WL.<$$>
      punctuation "}")
 
+ppNewtype :: Name -> (Name, Type) -> Doc SyntaxAnnotation
+ppNewtype nn@(Name n) (fn, ft) =
+  WL.hang
+    2
+    (keyword "newtype" <+>
+     WL.annotate (TypeDefinition n) (ppName nn) <+>
+     punctuation "=" <+>
+     punctuation "{" WL.<$$>
+     ppRecordField nn fn ft WL.<$$>
+     punctuation "}")
+
+
 ppRecordField :: Name -> Name -> Type -> Doc SyntaxAnnotation
 ppRecordField (Name tn) nn@(Name n) ty =
   WL.annotate (FieldDefinition tn n) (ppName nn) <+> punctuation ":" <+> ppType 0 ty
@@ -122,6 +136,11 @@ ppType p t =
         punctuation "(" WL.<> primitive "List" <+> ppType 11 lt WL.<> punctuation ")"
       else
         primitive "List" <+> ppType 11 lt
+    MaybeT lt ->
+      if p > 10 then
+        punctuation "(" WL.<> primitive "Maybe" <+> ppType 11 lt WL.<> punctuation ")"
+      else
+        primitive "Maybe" <+> ppType 11 lt
 
 ppGroundType :: Ground -> Doc SyntaxAnnotation
 ppGroundType =
@@ -167,3 +186,7 @@ prettyDecorated start end =
 prettyUndecorated :: Doc a -> Text
 prettyUndecorated =
   prettyDecorated (const mempty) (const mempty)
+
+-- | Converts a curried function to a function on a triple.
+uncurry3 :: (a -> b -> c -> d) -> ((a, b, c) -> d)
+uncurry3 f ~(a,b,c) = f a b c

@@ -1,0 +1,5 @@
+-- machinator @ v2
+
+data AggregateExpression
+  = Sum {}
+  | Average {}

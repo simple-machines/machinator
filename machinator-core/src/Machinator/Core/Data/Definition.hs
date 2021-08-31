@@ -12,6 +12,7 @@ module Machinator.Core.Data.Definition (
   , Definition (..)
   , DefinitionFileGraph (..)
   -- * Datatype types
+  , Docs (..)
   , Name (..)
   , Type (..)
   , Ground (..)
@@ -38,12 +39,21 @@ import           System.IO  (FilePath)
 
 -- | A set of type definitions from a given file.
 data DefinitionFile
-  = DefinitionFile FilePath [Definition]
-  deriving (Eq, Ord, Show, Data, Typeable, Generic)
+  = DefinitionFile {
+      definitionFileName :: FilePath
+    , definitionFileDefinitions :: [Definition]
+    } deriving (Eq, Ord, Show, Data, Typeable, Generic)
+
+
+newtype Docs = Docs {
+    docText :: Text
+  } deriving (Eq, Ord, Show, Data, Typeable, Generic)
+
 
 -- | A single data definition.
 data Definition = Definition {
      defName :: Name
+   , defDoc  :: Maybe Docs
    , defType :: DataType
    } deriving (Eq, Ord, Show, Data, Typeable, Generic)
 
@@ -51,7 +61,7 @@ data Definition = Definition {
 -- Maps each file to the other files it depends on.
 newtype DefinitionFileGraph = DefinitionFileGraph {
     unDefinitionFileGraph :: Map FilePath (Set FilePath)
-  } deriving (Eq, Ord, Show, Monoid, Data, Typeable, Generic)
+  } deriving (Eq, Ord, Show, Semigroup, Monoid, Data, Typeable, Generic)
 
 
 -- -----------------------------------------------------------------------------
@@ -66,12 +76,19 @@ data Type
   = Variable Name
   | GroundT Ground
   | ListT Type
+  | MaybeT Type
   deriving (Eq, Ord, Show, Data, Typeable, Generic)
 
 -- | Ground types, e.g. platform primitives.
 data Ground
   = StringT
   | BoolT
+  | IntT
+  | LongT
+  | DoubleT
+  | UUIDT
+  | DateT
+  | DateTimeT
   deriving (Eq, Ord, Show, Data, Typeable, Generic)
 
 -- | Obtain the stringy form for a ground type.
@@ -82,6 +99,18 @@ groundToName g =
       Name "String"
     BoolT ->
       Name "Bool"
+    IntT ->
+      Name "Int"
+    LongT ->
+      Name "Long"
+    DoubleT ->
+      Name "Double"
+    UUIDT ->
+      Name "UUID"
+    DateT ->
+      Name "Date"
+    DateTimeT ->
+      Name "DateTime"
 
 -- | Obtain the ground type for a stringy name.
 groundFromName :: Alternative f => Name -> f Ground
@@ -91,13 +120,26 @@ groundFromName n =
       pure StringT
     "Bool" ->
       pure BoolT
+    "Int" ->
+      pure IntT
+    "Long" ->
+      pure LongT
+    "Double" ->
+      pure DoubleT
+    "UUID" ->
+      pure UUIDT
+    "Date" ->
+      pure DateT
+    "DateTime" ->
+      pure DateTimeT
     _ ->
       empty
 
 -- | Declarable datatypes, e.g. sums or records.
 data DataType
-  = Variant (NonEmpty (Name, [Type]))
+  = Variant (NonEmpty (Name, Maybe Docs, [(Name, Type)]))
   | Record [(Name, Type)]
+  | Newtype (Name, Type)
   deriving (Eq, Ord, Show, Data, Typeable, Generic)
 
 -- -----------------------------------------------------------------------------
@@ -106,10 +148,12 @@ free :: DataType -> Set Name
 free d =
   case d of
     Variant nts ->
-      fold . with nts $ \(_, ts) ->
-        S.fromList . catMaybes . with ts $ freeInType
+      fold . with nts $ \(_, _, fts) ->
+        S.fromList . catMaybes . with fts $ \(_, t) -> freeInType t
     Record fts ->
-      S.fromList . catMaybes . with fts $ \(_, t) -> (freeInType t)
+      S.fromList . catMaybes . with fts $ \(_, t) -> freeInType t
+    Newtype (_, t) ->
+      S.fromList $ catMaybes [freeInType t]
 
 freeInType :: Type -> Maybe Name
 freeInType t =
@@ -119,4 +163,6 @@ freeInType t =
     GroundT _ ->
       empty
     ListT lt ->
+      freeInType lt
+    MaybeT lt ->
       freeInType lt

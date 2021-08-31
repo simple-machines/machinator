@@ -8,6 +8,7 @@ module Machinator.Core.Lexer (
 
 
 import qualified Data.Text as T
+import           Data.Void (Void)
 
 import           Machinator.Core.Data.Position
 import           Machinator.Core.Data.Token
@@ -17,10 +18,13 @@ import           P
 
 import           System.IO  (FilePath)
 
-import qualified Text.Megaparsec.Lexer as ML
+import qualified Text.Megaparsec.Char.Lexer as ML
+import qualified Text.Megaparsec.Char as M
 import qualified Text.Megaparsec as M
-import           Text.Megaparsec.Text  (Parser)
+import           Text.Megaparsec.Error (errorBundlePretty)
+import qualified Text.Megaparsec.Byte as C
 
+type Parser = M.Parsec Void Text
 
 data LexError
   = LexError Text
@@ -34,7 +38,7 @@ renderLexError e =
 
 lexVersioned :: FilePath -> Text -> Either LexError (Versioned [Positioned Token])
 lexVersioned file t =
-  first (LexError . T.pack . M.parseErrorPretty) (M.runParser (lexVersioned' <* M.eof) file t)
+  first (LexError . T.pack . errorBundlePretty) (M.runParser (lexVersioned' <* M.eof) file t)
 
 
 -- -----------------------------------------------------------------------------
@@ -51,10 +55,10 @@ lexVersioned' = do
 version :: Parser MachinatorVersion
 version = do
   string "-- machinator @ v"
-  v <- ML.integer
+  v <- ML.decimal
   _ <- M.newline
   space
-  case versionFromNumber v of
+  case versionFromNumber (v :: Int) of
     Just ver ->
       pure ver
     Nothing ->
@@ -69,19 +73,23 @@ token' :: Parser (Positioned Token)
 token' =
   withPosition $ M.choice [
       M.try $
-        string (T.unpack dataKeyword) >> M.spaceChar
-          >> pure TData
+        string (T.unpack dataKeyword) *> M.spaceChar
+          $> TData
     , M.try $
-        string (T.unpack recordKeyword) >> M.spaceChar
-          >> pure TRecord
-    , string "=" *> pure TEquals
-    , string "|" *> pure TChoice
-    , string "(" *> pure TLParen
-    , string ")" *> pure TRParen
-    , string "{" *> pure TLBrace
-    , string "}" *> pure TRBrace
-    , string ":" *> pure TTypeSig
-    , string "," *> pure TComma
+        string (T.unpack recordKeyword) *> M.spaceChar
+          $> TRecord
+    , M.try $
+        string (T.unpack newtypeKeyword) *> M.spaceChar
+          $> TNewtype
+    , docComment
+    , string "=" $> TEquals
+    , string "|" $> TChoice
+    , string "(" $> TLParen
+    , string ")" $> TRParen
+    , string "{" $> TLBrace
+    , string "}" $> TRBrace
+    , string ":" $> TTypeSig
+    , string "," $> TComma
     , ident
     ]
 
@@ -89,10 +97,41 @@ comment :: MachinatorVersion -> Parser ()
 comment v =
   when (featureEnabled v HasComments) $
     void . many $ M.choice [
-        ML.skipBlockCommentNested "{-" "-}"
-      , ML.skipLineComment "--"
+        skipNotDocBlockCommentNested
+      , singleNotDocLineComment
       , void M.spaceChar
       ]
+
+docComment :: Parser Token
+docComment =
+  singleDocComment <|> multiDocComment
+
+singleDocComment :: Parser Token
+singleDocComment = do
+  M.try (string "--" <* M.space <* M.char '|')
+  s <- M.takeWhileP (Just "character") (/= '\n')
+  pure (TDoc s)
+
+singleNotDocLineComment :: Parser ()
+singleNotDocLineComment = do
+  M.try (string "--" *> M.notFollowedBy (M.space *> C.string "|"))
+  void (M.takeWhileP (Just "character") (/= '\n'))
+
+multiDocComment :: Parser Token
+multiDocComment = do
+  M.try (string "{-" <* M.space <* M.char '|')
+  s <- M.manyTill M.anySingle (C.string "-}")
+  pure (TDoc (T.pack s))
+{-# INLINEABLE multiDocComment #-}
+
+skipNotDocBlockCommentNested :: Parser ()
+skipNotDocBlockCommentNested = p *> void (M.manyTill e n)
+  where
+    e = ML.skipBlockCommentNested "{-" "-}" <|> void M.anySingle
+    p = M.try (C.string "{-" *> M.notFollowedBy (M.space *> C.string "|"))
+    n = C.string "-}"
+{-# INLINEABLE skipNotDocBlockCommentNested #-}
+
 
 ident :: Parser Token
 ident = do
@@ -108,12 +147,12 @@ space =
 
 string :: [Char] -> Parser ()
 string s =
-  M.string s *> pure ()
+  M.string (T.pack s) *> pure ()
 {-# INLINEABLE string #-}
 
 getPosition :: Parser Position
 getPosition =
-  fmap posPosition M.getPosition
+  fmap posPosition M.getSourcePos
 {-# INLINEABLE getPosition #-}
 
 withPosition :: Parser a -> Parser (Positioned a)
