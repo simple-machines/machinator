@@ -132,10 +132,9 @@ skipNotDocBlockCommentNested = p *> void (M.manyTill e n)
     n = C.string "-}"
 {-# INLINEABLE skipNotDocBlockCommentNested #-}
 
-
 ident :: Parser Token
 ident = do
-  s <- some M.alphaNumChar
+  s <- some (M.char '_' <|> M.alphaNumChar)
   pure (TIdent (T.pack s))
 
 -- -----------------------------------------------------------------------------
