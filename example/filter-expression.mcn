@@ -7,3 +7,19 @@ record FilterExpression = { sql: String }
      In Python, we just treat newtypes as synonyms.
 -}
 newtype Foo = { foo: int }
+
+
+{- | Variant type. -}
+data Foo
+  = {- | The last, best chance for peace. -}
+     V1 {
+          name: String
+     }
+  |  {- | This has all happened before. -}
+     V2 {
+          names: List String,
+          age: Int,
+          height: Maybe Double,
+          wot: Foo,
+          bar: Maybe Bar
+     }
