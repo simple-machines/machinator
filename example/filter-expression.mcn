@@ -4,6 +4,15 @@
 record FilterExpression = { sql: String }
 
 
+{- | SQL expression to use when selecting input records. -}
+record SelectExpression = { sql: String }
+
+{- | SQL expression to use when selecting input records. -}
+record AggregateExpression = { sql: String }
+
+{- | SQL expression to use when selecting input records. -}
+record PostAggregateExpression = { sql: String }
+
 {- | This is an example.
      In Python, we just treat newtypes as synonyms.
 -}

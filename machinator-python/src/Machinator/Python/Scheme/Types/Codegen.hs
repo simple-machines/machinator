@@ -102,13 +102,15 @@ classDocstring (Just (Docs docs)) flds =
     open  = string "\"\"\""
     close = string "\"\"\""
     trimmed = T.stripEnd (T.unlines (T.strip <$> T.lines docs))
-    args = WL.vsep [
-        text "Args:",
-        WL.indent 2 . WL.vsep $
-          fmap (\(Name n, ty) -> text n WL.<+> WL.parens (genTypeV1 ty) <> WL.char ':' WL.<+> string "A field") flds
-      ]
   in (:[]) . WL.group $
-    open <> WL.pretty trimmed WL.<#> WL.linebreak <> args WL.<#> close
+    open <> text trimmed <> arguments flds WL.<#> close
+
+
+arguments :: [(Name, Type)] -> Doc a
+arguments [] = mempty
+arguments flds = WL.line <> "Args:" WL.<#> WL.indent 4 (
+    WL.vsep $ fmap (\(Name n, ty) -> text n <> " (" <> genTypeV1 ty <> "): A data field") flds
+  )
 
 enumDocstring :: Maybe Docs -> [Doc a]
 enumDocstring Nothing = []
@@ -157,7 +159,7 @@ fields = fmap (\(Name n, t) -> text n WL.<> WL.char ':' WL.<+> genTypeV1 t)
 serde :: Name -> [(Name, Type)] -> [Doc a]
 serde n flds =
   [ WL.mempty
-  , generateJsonSchema flds
+  , generateJsonSchema n flds
   , WL.mempty
   , generateFromJson n flds
   , WL.mempty
@@ -188,10 +190,14 @@ isEnum cs = go cs
     go ((_, _, []):rs) = go rs
     go _ = False
 
-generateJsonSchema :: [(Name, Type)] -> Doc a
-generateJsonSchema flds =
+generateJsonSchema :: Name -> [(Name, Type)] -> Doc a
+generateJsonSchema (Name n) flds =
     classmethod . method "json_schema" [] $ WL.vsep [
-      tripleQuote "Return the JSON schema for this data type.",
+      "\"\"\"Return the JSON schema for " <> text n <> " data." WL.<#>
+      WL.line <>
+      "Returns:" WL.<#>
+      WL.indent 4 ("The JSON schema to validate serialised " <> text n <> " values.") WL.<#>
+      "\"\"\"",
       "return dict" <> WL.parens (
         WL.line <>
         WL.indent 4 (WL.vsep
@@ -232,10 +238,15 @@ schemaType ty =
 generateToJson :: Name -> [(Name, Type)] -> Doc a
 generateToJson _ flds =
     method "to_json" [] $ WL.vsep [
-      tripleQuote (text "Generate dictionary ready to be serialised to JSON."),
+      "\"\"\"Generate dictionary ready to be serialised to JSON." WL.<#>
+      WL.line <>
+      "Returns:" WL.<#>
+      WL.indent 4 "A dictionary ready to serialised as JSON." WL.<#>
+      "\"\"\""
+      ,
       text "return dict" <> WL.parens (
         WL.line <>
-        WL.nest 4 (WL.vsep (fmap serialiseField flds)) <>
+        WL.indent 4 (WL.vsep (fmap serialiseField flds)) <>
         WL.line
       )
     ]
@@ -246,7 +257,14 @@ generateToJson _ flds =
 generateFromJson :: Name -> [(Name, Type)] -> Doc a
 generateFromJson (Name n) flds =
     classmethod . method "from_json" [(Name "data", Right "dict")] $ WL.vsep [
-      tripleQuote (text "Validate and parse JSON data into an instance of " <> text n <> "."),
+      "\"\"\"" <> "Validate and parse JSON data into an instance of " <> text n <> "." WL.<#>
+      WL.line <>
+      "Args:" WL.<#>
+      WL.indent 4 "data (dict): JSON dictionary to validate and parse." WL.<#>
+      WL.line <>
+      "Returns:" WL.<#>
+      WL.indent 4 "An instance of " <> text n <> "." WL.<#>
+      "\"\"\"",
       "try:",
       WL.indent 4 . WL.vsep $ [
         "jsonschema.validate" <> WL.encloseSep WL.lparen WL.rparen WL.comma [

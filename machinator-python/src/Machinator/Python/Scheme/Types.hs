@@ -40,7 +40,7 @@ typesV1 dfs =
 renderModule :: FilePath -> ModuleName -> Map ModuleName (Set ModuleName) -> [Definition] -> Text
 renderModule fp mn@(ModuleName n) imports defs =
   T.unlines [
-      "\"\"\"" <> n <> "\"\"\""
+      "\"\"\"Generated implementation of " <> n <> ".\"\"\""
     -- TODO: We should only include these when required for this module.
     , ""
     , "# Generated from " <> T.pack fp

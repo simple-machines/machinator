@@ -1,5 +1,36 @@
 -- machinator @ v2
 
+
+{- | Unique identifiers for features. -}
+newtype FeatureId = { value: Int }
+
+newtype FeatureVersionId = { value: UUID }
+
+{- | SQL-safe names for features. -}
+newtype FeatureName = { value: String }
+
+{- | Metadata label. -}
+newtype Label = { value: String }
+
+{- | Metadata key/value pair. -}
+record Attribute = { key: String, value: Maybe String }
+
+{- | Quality metadata for features. -}
+data QualityRating
+   = Gold
+   | Silver
+   | Bronze
+
+
+{- | Unique identifiers for entities. -}
+newtype EntityId = { value: Int }
+
+{- | Unique identifier for templates. -}
+newtype TemplateId = { value: Int }
+
+newtype TableId = { value: Int }
+
+
 {- | What is this -}
 data Feature
  = EventFeature {
