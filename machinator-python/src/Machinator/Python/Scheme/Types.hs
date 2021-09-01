@@ -39,27 +39,24 @@ typesV1 dfs =
 
 renderModule :: FilePath -> ModuleName -> Map ModuleName (Set ModuleName) -> [Definition] -> Text
 renderModule fp mn@(ModuleName n) imports defs =
-  T.unlines [
-      "\"\"\"Generated implementation of " <> n <> ".\"\"\""
-    -- TODO: We should only include these when required for this module.
+  T.unlines (
+    [ "\"\"\"Generated implementation of " <> n <> ".\"\"\""
     , ""
     , "# Generated from " <> T.pack fp
+    , ""
+    , "from __future__ import annotations"
     , ""
     , "import dataclasses  # noqa: F401"
     , "import datetime  # noqa: F401"
     , "import enum  # noqa: F401"
     , "import logging  # noqa: F401"
     , "import uuid  # noqa: F401"
-    , "from typing import Optional, List  # noqa: F401"
-    , ""
+    , "import typing  # noqa: F401"
     , "import jsonschema  # noqa: F401"
-    , "##"
-    , maybe mempty (T.unlines . fmap renderImport . toList) (M.lookup mn imports)
-    , "###"
-    , T.unlines . with defs $ \def ->
-        Codegen.genTypesV1 def
-    , "# EOF"
     ]
+    <> maybe mempty (("":) . fmap renderImport . toList) (mfilter (not . null) $ M.lookup mn imports)
+    <> with defs Codegen.genTypesV1
+  )
 
 renderImport :: ModuleName -> Text
 renderImport (ModuleName n) =

@@ -12,7 +12,7 @@ import           Options.Applicative
 import           P
 
 import           System.Directory
-import           System.FilePath ((</>), takeDirectory)
+import           System.FilePath ((</>), takeDirectory, dropExtension)
 import           System.IO (IO, FilePath)
 import qualified System.IO as IO
 import           X.Control.Monad.Trans.Either (EitherT, hoistEither)
@@ -24,27 +24,28 @@ import           Machinator.Python as Machinator
 
 data Options
   = Options
-    { targetDirectory :: FilePath
-    , sourceFiles :: [FilePath]
+    { targetDirectory :: FilePath  -- ^ Directory to write output files.
+    , sourceFiles :: [FilePath]    -- ^ Input files.
     }
 
 inputs :: Parser [FilePath]
 inputs = many (strArgument (metavar "machinator"))
 
 options :: Parser Options
-options = Options <$> strOption (long "target" <> metavar "DIR") <*> inputs
+options = Options
+  <$> strOption (long "target" <> metavar "DIR")
+  <*> inputs
 
 
 main :: IO ()
 main = do
-  (Options output files) <- execParser opts
+  (Options out files) <- execParser opts
   definitions <- orDie (T.pack . show) $ parseData files
   results     <- orDie (T.pack . show) $ hoistEither $ typesV1 definitions
 
   for_ results $ \(fp, contents) -> do
-    let dest = output </> fp
+    let dest = dropExtension (out </> fp) </> "__init__.py"
     createDirectoryIfMissing True (takeDirectory dest)
-    T.writeFile (takeDirectory dest </> "__init__.py") "\"\"\"Generated code.\"\"\"\n"
     T.writeFile dest contents
     IO.putStrLn ("Created " <> dest)
 

@@ -4,6 +4,7 @@
 {- | Unique identifiers for features. -}
 newtype FeatureId = { value: Int }
 
+{- | Unique identified for feature versions. -}
 newtype FeatureVersionId = { value: UUID }
 
 {- | SQL-safe names for features. -}
@@ -21,19 +22,20 @@ data QualityRating
    | Silver
    | Bronze
 
-
 {- | Unique identifiers for entities. -}
 newtype EntityId = { value: Int }
 
 {- | Unique identifier for templates. -}
 newtype TemplateId = { value: Int }
 
+{- | Unique identifier for tables. -}
 newtype TableId = { value: Int }
 
 
-{- | What is this -}
+{- | Feature definitions. -}
 data Feature
- = EventFeature {
+ = {- | Definition of an event feature. -}
+   EventFeature {
     id: FeatureId,
     name: FeatureName,
     description: String,
@@ -49,7 +51,8 @@ data Feature
     template: Maybe TemplateId,
     version: FeatureVersionId
    }
-  | RowFeature {
+  | {- | Definition of a row feature. -}
+   RowFeature {
      id: FeatureId,
      name: FeatureName,
      description: String,

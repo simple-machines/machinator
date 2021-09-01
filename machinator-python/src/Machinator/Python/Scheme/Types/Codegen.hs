@@ -31,19 +31,18 @@ genTypesV1' (Definition name@(Name n) mDoc dec) =
     Variant (c1 :| cts)
       | isEnum (c1:cts) -> enum name mDoc (c1:cts)
       | otherwise       -> WL.vsep $
-                               dataclass name Nothing mDoc []
+                               superclass name mDoc
                              : fmap (\(m, md, fs) -> dataclass m (Just name) md fs) (c1:cts)
 
     Record fts          -> dataclass name Nothing mDoc fts
 
     Newtype (_, t)      ->
       -- TODO: We may want to do something a little more useful here.
-      WL.vsep [
-        "",
-        "",
-        comment mDoc,
-        WL.hsep [text n, WL.char '=', genTypeV1 t]
-      ]
+      WL.vsep (
+        ["", ""] <>
+        maybeToList (comment <$> mDoc) <>
+        [WL.hsep [text n, WL.char '=', genTypeV1 t]]
+      )
 
 
 genTypeV1 :: Type -> Doc a
@@ -72,9 +71,9 @@ genTypeV1 ty =
         DateTimeT ->
           text "datetime.datetime"
     ListT t2 ->
-      text "List" WL.<> WL.brackets (genTypeV1 t2)
+      text "typing.List" WL.<> WL.brackets (genTypeV1 t2)
     MaybeT t2 ->
-      string "Optional" <> WL.brackets (genTypeV1 t2)
+      string "typing.Optional" <> WL.brackets (genTypeV1 t2)
 
 
 -- -----------------------------------------------------------------------------
@@ -91,47 +90,59 @@ renderText :: Doc a -> Text
 renderText =
   TL.toStrict . WL.displayT . WL.renderPretty 0.8 100
 
-comment :: Maybe Docs -> Doc a
-comment Nothing = WL.mempty
-comment (Just (Docs docs)) = WL.vsep $ fmap (\t -> text "#" WL.<+> text (T.strip t)) $ T.lines docs
+comment :: Docs -> Doc a
+comment (Docs docs) = WL.vsep $ (text "# " <>) . text . T.strip <$> T.lines docs
 
-classDocstring :: Maybe Docs -> [(Name, Type)] -> [Doc a]
-classDocstring Nothing _ = []
-classDocstring (Just (Docs docs)) flds =
+googleDocstring :: Maybe Docs -> [(Name, Type)] -> Maybe Text -> [Doc a]
+googleDocstring Nothing [] Nothing = []
+googleDocstring (Just (Docs docs)) [] Nothing = ["\"\"\"" WL.<> text (T.strip docs) WL.<> "\"\"\""]
+googleDocstring mDocs flds mRet =
   let
-    open  = string "\"\"\""
-    close = string "\"\"\""
-    trimmed = T.stripEnd (T.unlines (T.strip <$> T.lines docs))
-  in (:[]) . WL.group $
-    open <> text trimmed <> arguments flds WL.<#> close
+    trimmed = case mDocs of
+      Just (Docs docs) -> [text $ T.stripEnd (T.unlines (T.strip <$> T.lines docs))]
+      Nothing -> mempty
+    ret = case mRet of
+      Nothing -> mempty
+      Just t ->  [WL.line <> "Returns:" WL.<#> WL.indent 4 (text t) <> WL.line]
+  in
+    [
+      "\"\"\"" <> WL.vsep (trimmed <> arguments flds <> ret) WL.<#>
+      "\"\"\""
+    ]
 
-
-arguments :: [(Name, Type)] -> Doc a
+arguments :: [(Name, Type)] -> [Doc a]
 arguments [] = mempty
-arguments flds = WL.line <> "Args:" WL.<#> WL.indent 4 (
-    WL.vsep $ fmap (\(Name n, ty) -> text n <> " (" <> genTypeV1 ty <> "): A data field") flds
-  )
-
-enumDocstring :: Maybe Docs -> [Doc a]
-enumDocstring Nothing = []
-enumDocstring (Just (Docs docs)) =
-  let
-    open  = string "\"\"\""
-    close = string "\"\"\""
-    trimmed = text . T.strip <$> T.lines docs
-  in [WL.group $ open <> WL.vsep trimmed <> close, WL.mempty]
-
+arguments flds = [
+    WL.line <> "Args:" WL.<#> WL.indent 4 (
+      WL.vsep $ fmap (\(Name n, ty) -> text n <> " (" <> genTypeV1 ty <> "): A data field") flds
+    )
+  ]
 
 -- | Generates a Python enumeration.
 enum :: Name -> Maybe Docs -> [(Name, Maybe Docs, [(Name, Type)])] -> Doc a
 enum (Name n) mDoc ctors =
-    WL.vsep [
-      "",
-      "",
+  WL.linebreak WL.<#>
+  WL.vsep [
       string "class" WL.<+> text n WL.<> WL.parens (string "enum.Enum") WL.<> ":",
-      WL.indent 4 . WL.vsep $ enumDocstring mDoc <> fmap (\(Name m, _, []) -> WL.hsep [text m, WL.char '=', WL.dquotes $ text m]) ctors
-    ]
+      WL.indent 4 . WL.vsep $ googleDocstring mDoc [] Nothing <> fmap (\(Name m, _, []) -> WL.hsep [text m, WL.char '=', WL.dquotes $ text m]) ctors
+  ]
 
+
+superclass :: Name -> Maybe Docs -> Doc a
+superclass (Name n) mDoc =
+  WL.linebreak WL.<#>
+  WL.vsep
+    [ "@dataclasses.dataclass(frozen=True)"
+    , "class" <+> text n <> ":"
+    , WL.indent 4 . WL.vsep $ (
+      googleDocstring mDoc [] Nothing <>
+      [""] <>
+      [
+        "ADT_TYPE: typing.ClassVar[str] = ''",
+        "adt_type: str = dataclasses.field(default=ADT_TYPE, init=False, repr=False)"
+      ]
+    )
+    ]
 
 -- | Generates a Python dataclass.
 dataclass :: Name -> Maybe Name -> Maybe Docs -> [(Name, Type)] -> Doc a
@@ -141,7 +152,7 @@ dataclass name@(Name n) super mDoc flds =
     [ string "@dataclasses.dataclass(frozen=True)"
     , string "class" <+> text n <> extends <> string ":"
     , WL.indent 4 . WL.vsep $ (
-        classDocstring mDoc flds <>
+        googleDocstring mDoc flds Nothing <>
         [""] <>
         fields flds <>
         serde name flds
@@ -192,29 +203,25 @@ isEnum cs = go cs
 
 generateJsonSchema :: Name -> [(Name, Type)] -> Doc a
 generateJsonSchema (Name n) flds =
-    classmethod . method "json_schema" [] $ WL.vsep [
-      "\"\"\"Return the JSON schema for " <> text n <> " data." WL.<#>
-      WL.line <>
-      "Returns:" WL.<#>
-      WL.indent 4 ("The JSON schema to validate serialised " <> text n <> " values.") WL.<#>
-      "\"\"\"",
+    classmethod . method "json_schema" [] $ WL.vsep (
+      googleDocstring (Just (Docs $ "Return the JSON schema for " <> n <> " data.")) [] (Just "JSON schema dictionary.") <> [
       "return dict" <> WL.parens (
         WL.line <>
         WL.indent 4 (WL.vsep
           [ "type=\"object\","
           , "properties=dict(" WL.<#> WL.indent 4 (WL.vsep (fmap fieldSchema flds)) WL.<#> "),"
-          , "required=" <> WL.encloseSep WL.lbracket WL.rbracket WL.comma (flds >>= requiredField)
+          , "required=[" WL.<#> (WL.indent 4 . WL.vsep $ flds >>= requiredField) WL.<#> "]"
         ]) <>
         WL.line
       )
-    ]
+    ])
   where
     fieldSchema (Name f, ty) =
       text f <> "=" <> schemaType ty <> ","
-    requiredField (Name n, ty) =
-      case ty of 
+    requiredField (Name f, ty) =
+      case ty of
         MaybeT _ -> []
-        _        -> [WL.dquotes (text n)]
+        _        -> [WL.dquotes (text f) <> ","]
 
 schemaType :: Type -> Doc a
 schemaType ty =
@@ -230,26 +237,23 @@ schemaType ty =
       DateT -> "dict(type=\"string\", format=\"date\")"
       DateTimeT -> "dict(type=\"string\", format=\"date-time\")"
     ListT ty' -> "dict(type=\"array\", item="<> schemaType ty' <> ")"
-    MaybeT ty' -> "dict(oneOf=[" <>
-      "dict(type=\"null\"), " <> 
-      schemaType ty'
-     <> "])"
+    MaybeT ty' -> "dict(oneOf=[" WL.<#>
+      WL.indent 4 (WL.vsep [
+        "dict(type=\"null\"),",
+        schemaType ty'
+      ])
+     WL.<#> "])"
 
 generateToJson :: Name -> [(Name, Type)] -> Doc a
 generateToJson _ flds =
-    method "to_json" [] $ WL.vsep [
-      "\"\"\"Generate dictionary ready to be serialised to JSON." WL.<#>
-      WL.line <>
-      "Returns:" WL.<#>
-      WL.indent 4 "A dictionary ready to serialised as JSON." WL.<#>
-      "\"\"\""
-      ,
+    method "to_json" [] $ WL.vsep (
+      googleDocstring (Just (Docs "Serialise this instance as JSON.")) [] (Just "A dictionary ready to serialise as JSON.") <> [
       text "return dict" <> WL.parens (
         WL.line <>
         WL.indent 4 (WL.vsep (fmap serialiseField flds)) <>
         WL.line
       )
-    ]
+    ])
   where
     serialiseField (Name f, ty) =
       text f <> "=" <> serialiseType ("self." <> text f) ty <> ","
@@ -264,6 +268,12 @@ generateFromJson (Name n) flds =
       WL.line <>
       "Returns:" WL.<#>
       WL.indent 4 "An instance of " <> text n <> "." WL.<#>
+      WL.line <>
+      "Raises:" WL.<#>
+      WL.indent 4 ( WL.vsep [
+        "ValidationError: When schema validation fails.",
+        "KeyError: When a required field is missing from the JSON."
+      ]) WL.<#>
       "\"\"\"",
       "try:",
       WL.indent 4 . WL.vsep $ [
@@ -281,11 +291,10 @@ generateFromJson (Name n) flds =
       ]
     ]
   where
+    parseField (Name f, MaybeT ty) =
+      text f <> "=" <> parseType ("data.get(\"" <> f <> "\", None)") ty <> ","
     parseField (Name f, ty) =
-      text f <> "=" <> parseType ("data.get(\"" <> f <> "\")") ty <> ","
-
-tripleQuote :: Doc a -> Doc a
-tripleQuote s = text "\"\"\"" <> s <> text "\"\"\""
+      text f <> "=" <> parseType ("data[\"" <> f <> "\"]") ty <> ","
 
 serialiseType :: Doc a -> Type -> Doc a
 serialiseType value ty = case ty of
