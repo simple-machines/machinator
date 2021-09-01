@@ -161,7 +161,7 @@ fields = fmap (\(Name n, t) -> text n WL.<> WL.char ':' WL.<+> genTypeV1 t)
 serde :: Name -> [(Name, Type)] -> [Doc a]
 serde n flds =
   [ WL.mempty
-  , classmethod $ method "json_schema" [] (string "pass")
+  , generateJsonSchema flds
   , generateFromJson n flds
   , generateToJson n flds
   ]
@@ -190,9 +190,47 @@ isEnum cs = go cs
     go ((_, _, []):rs) = go rs
     go _ = False
 
+generateJsonSchema :: [(Name, Type)] -> Doc a
+generateJsonSchema flds =
+    classmethod . method "json_schema" [] $ WL.vsep [
+      tripleQuote "Return the JSON schema for this data type.",
+      "return dict" <> WL.parens (
+        WL.line <>
+        WL.indent 4 (WL.vsep
+          [ "type=\"object\""
+          , "properties=dict(" WL.<#> WL.indent 4 (WL.vsep (fmap fieldSchema flds)) WL.<#> ")"
+          , "required=" <> WL.encloseSep WL.lbracket WL.rbracket WL.comma (flds >>= requiredField)
+        ]) <>
+        WL.line
+      )
+    ]
+  where
+    fieldSchema (Name f, ty) =
+      text f <> "=" <> schemaType ty
+    requiredField (Name n, ty) =
+      case ty of 
+        MaybeT _ -> []
+        _        -> [WL.dquotes (text n)]
+
+schemaType :: Type -> Doc a
+schemaType ty =
+  case ty of
+    Variable (Name v) -> text v <> ".json_schema()"
+    GroundT gr -> case gr of
+      StringT -> "dict(type=\"string\")"
+      BoolT -> "dict(type=\"boolean\")"
+      IntT -> "dict(type=\"integer\")"
+      LongT -> "dict(type=\"integer\")"
+      DoubleT -> "dict(type=\"float\")"
+      UUIDT -> "dict(type=\"string\", format=\"uuid\")"
+      DateT -> "dict(type=\"string\", format=\"date\")"
+      DateTimeT -> "dict(type=\"string\", format=\"date-time\")"
+    ListT ty' -> "dict(type=\"array\", item="<> schemaType ty' <> ")"
+    MaybeT ty' -> text "optional" <> WL.parens (schemaType ty')
+
 generateToJson :: Name -> [(Name, Type)] -> Doc a
-generateToJson cls flds =
-    method "to_json" [(Name "self", Left (Variable cls))] $ WL.vsep [
+generateToJson _ flds =
+    method "to_json" [] $ WL.vsep [
       tripleQuote (text "Generate dictionary ready to be serialised to JSON."),
       text "return dict" <> WL.parens (
         WL.line <>
@@ -208,8 +246,20 @@ generateFromJson :: Name -> [(Name, Type)] -> Doc a
 generateFromJson (Name n) flds =
     classmethod . method "from_json" [(Name "data", Right "dict")] $ WL.vsep [
       tripleQuote (text "Validate and parse JSON data into an instance of " <> text n <> "."),
-      text "return" WL.<+> text n <> WL.parens
-        (WL.line <> (WL.indent 4 . WL.vsep $ fmap parseField flds) <> WL.line)
+      "try:",
+      WL.indent 4 . WL.vsep $ [
+        "jsonschema.validate" <> WL.encloseSep WL.lparen WL.rparen WL.comma [
+          "data",
+          "self.json_schema()"
+        ],
+        text "return" WL.<+> text n <> WL.parens
+          (WL.line <> (WL.indent 4 . WL.vsep $ fmap parseField flds) <> WL.line)
+      ],
+      "except ValidationError as ex:",
+      WL.indent 4 . WL.vsep $ [
+        "logging.debug(\"Invalid JSON data received while parsing " <> text n <> "\", exc_info=ex)",
+        "raise"
+      ]
     ]
   where
     parseField (Name f, ty) =
@@ -220,7 +270,7 @@ tripleQuote s = text "\"\"\"" <> s <> text "\"\"\""
 
 serialiseType :: Doc a -> Type -> Doc a
 serialiseType value ty = case ty of
-  Variable na -> value <> ".to_json()"
+  Variable _ -> value <> ".to_json()"
   GroundT gr -> case gr of
     StringT -> value
     BoolT -> value
