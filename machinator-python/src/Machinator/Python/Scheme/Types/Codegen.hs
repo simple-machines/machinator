@@ -32,17 +32,19 @@ genTypesV1' (Definition name@(Name n) mDoc dec) =
       | isEnum (c1:cts) -> enum name mDoc (c1:cts)
       | otherwise       -> WL.vsep $
                                dataclass name Nothing mDoc []
-                             : fmap (uncurry3 (genConstructorV1 name)) (c1:cts)
+                             : fmap (\(m, md, fs) -> dataclass m (Just name) md fs) (c1:cts)
 
-    Record fts ->
-      genRecordV1 name mDoc fts
+    Record fts          -> dataclass name Nothing mDoc fts
 
-    Newtype (_, t) ->
+    Newtype (_, t)      ->
       -- TODO: We may want to do something a little more useful here.
       WL.vsep [
+        "",
+        "",
         comment mDoc,
         WL.hsep [text n, WL.char '=', genTypeV1 t]
       ]
+
 
 genTypeV1 :: Type -> Doc a
 genTypeV1 ty =
@@ -74,22 +76,6 @@ genTypeV1 ty =
     MaybeT t2 ->
       string "Optional" <> WL.brackets (genTypeV1 t2)
 
-genConstructorV1 :: Name -> Name -> Maybe Docs -> [(Name, Type)] -> Doc a
-genConstructorV1 (Name extends) name =
-  dataclass name (Just extends)
-
--- | Generates a naked record for the given definition.
---
--- @
--- [(Name "foo", GroundT StringT), (Name "bar", GroundT StringT)]
--- { foo :: String, bar :: String }
--- @
-genRecordV1 :: Name -> Maybe Docs -> [(Name, Type)] -> Doc a
-genRecordV1 (Name n) _ [] =
-  WL.hang 2 $
-    text "case object" <+> text n
-
-genRecordV1 name mDoc fts = dataclass name Nothing mDoc fts
 
 -- -----------------------------------------------------------------------------
 
@@ -117,43 +103,53 @@ classDocstring (Just (Docs docs)) flds =
     close = string "\"\"\""
     trimmed = T.stripEnd (T.unlines (T.strip <$> T.lines docs))
     args = WL.vsep [
-        WL.softbreak ,
         text "Args:",
         WL.indent 2 . WL.vsep $
           fmap (\(Name n, ty) -> text n WL.<+> WL.parens (genTypeV1 ty) <> WL.char ':' WL.<+> string "A field") flds
       ]
   in (:[]) . WL.group $
-    open <> WL.align (
-      WL.pretty trimmed WL.<#> args
-    ) WL.<#> close
+    open <> WL.pretty trimmed WL.<#> WL.linebreak <> args WL.<#> close
 
--- | Converts a curried function to a function on a triple.
-uncurry3 :: (a -> b -> c -> d) -> ((a, b, c) -> d)
-uncurry3 f ~(a,b,c) = f a b c
+enumDocstring :: Maybe Docs -> [Doc a]
+enumDocstring Nothing = []
+enumDocstring (Just (Docs docs)) =
+  let
+    open  = string "\"\"\""
+    close = string "\"\"\""
+    trimmed = text . T.strip <$> T.lines docs
+  in [WL.group $ open <> WL.vsep trimmed <> close, WL.mempty]
+
 
 -- | Generates a Python enumeration.
 enum :: Name -> Maybe Docs -> [(Name, Maybe Docs, [(Name, Type)])] -> Doc a
 enum (Name n) mDoc ctors =
     WL.vsep [
+      "",
+      "",
       string "class" WL.<+> text n WL.<> WL.parens (string "enum.Enum") WL.<> ":",
-      WL.indent 4 . WL.vsep $ classDocstring mDoc [] <> fmap (\(Name m, _, []) -> WL.hsep [text m, WL.char '=', WL.dquotes $ text m]) ctors
-    ] WL.<> WL.line
+      WL.indent 4 . WL.vsep $ enumDocstring mDoc <> fmap (\(Name m, _, []) -> WL.hsep [text m, WL.char '=', WL.dquotes $ text m]) ctors
+    ]
 
 
 -- | Generates a Python dataclass.
-dataclass :: Name -> Maybe Text -> Maybe Docs -> [(Name, Type)] -> Doc a
+dataclass :: Name -> Maybe Name -> Maybe Docs -> [(Name, Type)] -> Doc a
 dataclass name@(Name n) super mDoc flds =
-  WL.vsep [
-    string "@dataclass(frozen=True)",
-    string "class" <+> text n <> extends <> string ":",
-    WL.indent 4 . WL.vsep $ (classDocstring mDoc flds <> fields flds <> serde name flds),
-    WL.line
-  ]
+  WL.linebreak WL.<#>
+  WL.vsep
+    [ string "@dataclasses.dataclass(frozen=True)"
+    , string "class" <+> text n <> extends <> string ":"
+    , WL.indent 4 . WL.vsep $ (
+        classDocstring mDoc flds <>
+        [""] <>
+        fields flds <>
+        serde name flds
+      )
+    ]
   where
     extends =
       case super of
         Nothing -> WL.mempty
-        Just sn -> WL.parens $ text sn
+        Just (Name sn) -> WL.parens $ text sn
 
 fields :: [(Name, Type)] -> [Doc a]
 fields = fmap (\(Name n, t) -> text n WL.<> WL.char ':' WL.<+> genTypeV1 t)
@@ -162,7 +158,9 @@ serde :: Name -> [(Name, Type)] -> [Doc a]
 serde n flds =
   [ WL.mempty
   , generateJsonSchema flds
+  , WL.mempty
   , generateFromJson n flds
+  , WL.mempty
   , generateToJson n flds
   ]
 
@@ -177,7 +175,7 @@ method name args body =
     WL.vsep [
       string "def" WL.<+> text name <> WL.encloseSep WL.lparen WL.rparen WL.comma (string "self" : fmap arg args) WL.<> WL.char ':'
     , WL.indent 4 body
-    ] WL.<> WL.line
+    ]
 
 arg :: (Name, Either Type Text) -> Doc a
 arg (Name n, t) = text n WL.<> WL.char ':' WL.<+> either genTypeV1 text t
@@ -197,8 +195,8 @@ generateJsonSchema flds =
       "return dict" <> WL.parens (
         WL.line <>
         WL.indent 4 (WL.vsep
-          [ "type=\"object\""
-          , "properties=dict(" WL.<#> WL.indent 4 (WL.vsep (fmap fieldSchema flds)) WL.<#> ")"
+          [ "type=\"object\","
+          , "properties=dict(" WL.<#> WL.indent 4 (WL.vsep (fmap fieldSchema flds)) WL.<#> "),"
           , "required=" <> WL.encloseSep WL.lbracket WL.rbracket WL.comma (flds >>= requiredField)
         ]) <>
         WL.line
@@ -206,7 +204,7 @@ generateJsonSchema flds =
     ]
   where
     fieldSchema (Name f, ty) =
-      text f <> "=" <> schemaType ty
+      text f <> "=" <> schemaType ty <> ","
     requiredField (Name n, ty) =
       case ty of 
         MaybeT _ -> []
@@ -226,7 +224,10 @@ schemaType ty =
       DateT -> "dict(type=\"string\", format=\"date\")"
       DateTimeT -> "dict(type=\"string\", format=\"date-time\")"
     ListT ty' -> "dict(type=\"array\", item="<> schemaType ty' <> ")"
-    MaybeT ty' -> text "optional" <> WL.parens (schemaType ty')
+    MaybeT ty' -> "dict(oneOf=[" <>
+      "dict(type=\"null\"), " <> 
+      schemaType ty'
+     <> "])"
 
 generateToJson :: Name -> [(Name, Type)] -> Doc a
 generateToJson _ flds =
@@ -234,13 +235,13 @@ generateToJson _ flds =
       tripleQuote (text "Generate dictionary ready to be serialised to JSON."),
       text "return dict" <> WL.parens (
         WL.line <>
-        WL.indent 4 (WL.vsep (fmap serialiseField flds)) <>
+        WL.nest 4 (WL.vsep (fmap serialiseField flds)) <>
         WL.line
       )
     ]
   where
     serialiseField (Name f, ty) =
-      text f <> "=" <> serialiseType ("self." <> text f) ty
+      text f <> "=" <> serialiseType ("self." <> text f) ty <> ","
 
 generateFromJson :: Name -> [(Name, Type)] -> Doc a
 generateFromJson (Name n) flds =
@@ -255,7 +256,7 @@ generateFromJson (Name n) flds =
         text "return" WL.<+> text n <> WL.parens
           (WL.line <> (WL.indent 4 . WL.vsep $ fmap parseField flds) <> WL.line)
       ],
-      "except ValidationError as ex:",
+      "except jsonschema.exceptions.ValidationError as ex:",
       WL.indent 4 . WL.vsep $ [
         "logging.debug(\"Invalid JSON data received while parsing " <> text n <> "\", exc_info=ex)",
         "raise"
@@ -263,7 +264,7 @@ generateFromJson (Name n) flds =
     ]
   where
     parseField (Name f, ty) =
-      text f <> "=" <> parseType ("data.get(\"" <> f <> "\")") ty
+      text f <> "=" <> parseType ("data.get(\"" <> f <> "\")") ty <> ","
 
 tripleQuote :: Doc a -> Doc a
 tripleQuote s = text "\"\"\"" <> s <> text "\"\"\""

@@ -40,23 +40,25 @@ typesV1 dfs =
 renderModule :: FilePath -> ModuleName -> Map ModuleName (Set ModuleName) -> [Definition] -> Text
 renderModule fp mn@(ModuleName n) imports defs =
   T.unlines [
-      "\"\"\"" <> n <> "\n\nGenerated from: " <> T.pack fp <> "\n\"\"\""
+      "\"\"\"" <> n <> "\"\"\""
     -- TODO: We should only include these when required for this module.
     , ""
-    , "import datetime"
-    , "import logging"
-    , "import uuid"
+    , "# Generated from " <> T.pack fp
     , ""
-    , "import jsonschema"
+    , "import dataclasses  # noqa: F401"
+    , "import datetime  # noqa: F401"
+    , "import enum  # noqa: F401"
+    , "import logging  # noqa: F401"
+    , "import uuid  # noqa: F401"
+    , "from typing import Optional, List  # noqa: F401"
     , ""
-    , ""
-    , "# Wot?"
-    , "# " <> T.pack (show mn)
-    , "# " <> T.pack (show (M.lookup mn imports))
+    , "import jsonschema  # noqa: F401"
+    , "##"
     , maybe mempty (T.unlines . fmap renderImport . toList) (M.lookup mn imports)
-    , ""
+    , "###"
     , T.unlines . with defs $ \def ->
         Codegen.genTypesV1 def
+    , "# EOF"
     ]
 
 renderImport :: ModuleName -> Text
@@ -81,7 +83,7 @@ newtype ModuleName = ModuleName {
 -- TODO V2 Accept an alternative function as a parameter.
 filePathToModuleName :: FilePath -> ModuleName
 filePathToModuleName =
-  ModuleName . T.pack . FilePath.dropExtension
+  ModuleName . T.pack . goLower . FilePath.dropExtension
   where
     -- Initial lower case
     goLower [] = []

@@ -1,12 +1,13 @@
 -- machinator @ v2
 
+{- | SQL expression to use when filtering input records. -}
 record FilterExpression = { sql: String }
 
 
 {- | This is an example.
      In Python, we just treat newtypes as synonyms.
 -}
-newtype Foo = { foo: int }
+newtype Example = { foo: int }
 
 
 {- | Variant type. -}
@@ -20,6 +21,6 @@ data Foo
           names: List String,
           age: Int,
           height: Maybe Double,
-          wot: Foo,
-          bar: Maybe Bar
+          parent: Maybe Foo,
+          bar: Size
      }

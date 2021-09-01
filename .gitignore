@@ -2,6 +2,7 @@ TAGS
 dist/
 dist-newstyle/
 cabal-dev/
+/venv*/
 *.o
 *.hi
 *.chi
