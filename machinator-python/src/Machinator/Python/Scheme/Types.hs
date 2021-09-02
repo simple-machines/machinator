@@ -42,7 +42,8 @@ renderModule fp mn@(ModuleName n) imports defs =
   T.unlines (
     [ "\"\"\"Generated implementation of " <> n <> ".\"\"\""
     , ""
-    , "# Generated from " <> T.pack fp
+    , "# WARNING DO NOT EDIT"
+    , "# This code was generated from " <> T.pack fp
     , ""
     , "from __future__ import annotations"
     , ""
