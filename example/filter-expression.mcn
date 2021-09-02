@@ -14,6 +14,7 @@ record AggregateExpression = { sql: String }
 record PostAggregateExpression = { sql: String }
 
 {- | This is an example.
+
      In Python, we just treat newtypes as synonyms.
 -}
 newtype Example = { foo: int }

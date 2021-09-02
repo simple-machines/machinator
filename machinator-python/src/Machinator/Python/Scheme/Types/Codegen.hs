@@ -29,7 +29,7 @@ genTypesV1 def = renderText $ genTypesV1' def
 
 -- | Generates a type declaration for the given definition.
 genTypesV1' :: Definition -> Doc a
-genTypesV1' (Definition name@(Name n) mDoc dec) =
+genTypesV1' (Definition name mDoc dec) =
   case dec of
     Variant (c1 :| cts)
       | isEnum (c1:cts) -> enum name mDoc (c1:cts)
@@ -39,13 +39,8 @@ genTypesV1' (Definition name@(Name n) mDoc dec) =
 
     Record fts          -> dataclass name Nothing mDoc fts
 
-    Newtype (_, t)      ->
-      -- TODO: We may want to do something a little more useful here.
-      WL.vsep (
-        ["", ""] <>
-        maybeToList (comment <$> mDoc) <>
-        [WL.hsep [text n, WL.char '=', genTypeV1 t]]
-      )
+    Newtype field      ->
+      dataclass name Nothing mDoc [field]
 
 
 genTypeV1 :: Type -> Doc a
@@ -89,7 +84,7 @@ googleDocstring mDocs flds mRet =
     mangle = mangleNames . S.fromList $ fmap fst flds
     args (nm@(Name n), ty) = (M.findWithDefault nm nm mangle, ty, Docs ("The '" <> n <> "' field."))
     trimmed = case mDocs of
-      Just (Docs docs) -> [text $ T.stripEnd (T.unlines (T.strip <$> T.lines docs))]
+      Just (Docs docs) -> text . T.strip <$> T.lines docs
       Nothing -> mempty
     ret = case mRet of
       Nothing -> mempty
@@ -356,9 +351,6 @@ string =
 text :: Text -> Doc a
 text =
   WL.text . T.unpack
-
-comment :: Docs -> Doc a
-comment (Docs docs) = WL.vsep $ (text "# " <>) . text . T.strip <$> T.lines docs
 
 renderText :: Doc a -> Text
 renderText =
