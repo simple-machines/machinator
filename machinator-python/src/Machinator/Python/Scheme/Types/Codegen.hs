@@ -39,7 +39,7 @@ genTypesV1' :: Definition -> Doc a
 genTypesV1' (Definition name mDoc dec) =
   case dec of
     Variant (c1 :| cts)
-      | isEnum (c1:cts) -> enum name mDoc (c1:cts)
+      | isEnum (c1:cts) -> enum name mDoc (fmap (\(n, _, _) -> n) $ c1:cts)
       | otherwise       -> WL.vsep $
                                superclass name mDoc
                              : fmap (\(m, md, fs) -> dataclass m (Just name) md fs) (c1:cts)
@@ -81,10 +81,14 @@ genTypeV1 ty =
 
 -- -----------------------------------------------------------------------------
 
+fieldDocstring :: (Name, Type) -> (Name, Type, Text)
+fieldDocstring (n, ty) = (n, ty, "A data field.")
+
+
 -- | Generate a Python docstring following Google's conventions.
 googleDocstring
   :: Maybe Docs     -- ^ Documentation.
-  -> [(Name, Type)] -- ^ Arguments
+  -> [(Name, Type, Text)] -- ^ Arguments
   -> Maybe Text     -- ^ Return value
   -> [(Name, Text)] -- ^ Exceptions
   -> [Doc a]
@@ -92,11 +96,11 @@ googleDocstring Nothing [] Nothing _ = []
 googleDocstring (Just (Docs docs)) [] Nothing _ = ["\"\"\"" WL.<> text (T.strip docs) WL.<> "\"\"\""]
 googleDocstring mDocs flds mRet exc =
   let
-    mangle = mangleNames . S.fromList $ fmap fst flds
+    mangle = mangleNames . S.fromList $ fmap (\(a, _, _) -> a) flds
     trimmed = case mDocs of
       Just (Docs docs) -> text . T.strip <$> T.lines docs
       Nothing -> mempty
-    args (nm@(Name n), ty) = (M.findWithDefault nm nm mangle, ty, Docs ("The '" <> n <> "' field."))
+    args (nm, ty, comment) = (M.findWithDefault nm nm mangle, ty, Docs comment)
     ret = case mRet of
       Nothing -> mempty
       Just t ->  [WL.line <> "Returns:" WL.<#> WL.indent 4 (text t)]
@@ -133,14 +137,14 @@ isEnum cs = go cs
 
 
 -- | Generates a Python enumeration.
-enum :: Name -> Maybe Docs -> [(Name, Maybe Docs, [(Name, Type)])] -> Doc a
+enum :: Name -> Maybe Docs -> [Name] -> Doc a
 enum n@(Name klass) mDoc ctors =
   WL.linebreak WL.<#>
   WL.vsep [
       string "class" WL.<+> text klass WL.<> WL.parens (string "enum.Enum") WL.<> ":",
       WL.indent 4 . WL.vsep $ (
         googleDocstring mDoc [] Nothing [] <>
-        fmap (\(Name m, _, []) -> WL.hsep [text m, WL.char '=', WL.dquotes $ text m]) ctors <>
+        fmap (\(Name m) -> WL.hsep [text m, WL.char '=', WL.dquotes $ text m]) ctors <>
         enumserde n ctors
       )
   ]
@@ -175,7 +179,7 @@ dataclass name@(Name n) super mDoc fieldDefs =
       [ string "@dataclasses.dataclass(frozen=True)"
       , string "class" <+> text n <> extends <> string ":"
       , WL.indent 4 . WL.vsep $ (
-          googleDocstring mDoc fieldDefs Nothing [] <>
+          googleDocstring mDoc (fmap fieldDocstring fieldDefs) Nothing [] <>
           [""] <>
           discriminator name <>
           [""] <>
@@ -201,7 +205,7 @@ wrapperclass name@(Name n) super mDoc field =
       [ string "@dataclasses.dataclass(frozen=True)"
       , string "class" <+> text n <> extends <> string ":"
       , WL.indent 4 . WL.vsep $ (
-          googleDocstring mDoc [field] Nothing [] <>
+          googleDocstring mDoc [fieldDocstring field] Nothing [] <>
           [""] <>
           discriminator name <>
           [""] <>
@@ -234,10 +238,10 @@ fields fs =
   in fmap field fs
 
 
-enumserde :: Name -> [(Name, Maybe Docs, [(Name, Type)])] -> [Doc a]
+enumserde :: Name -> [Name] -> [Doc a]
 enumserde n ctors =
   [ WL.mempty
-  , generateEnumJsonSchema n (fmap (\(n, _, _) -> n) ctors)
+  , generateEnumJsonSchema n ctors
   , WL.mempty
   , generateEnumFromJson n
   , WL.mempty
@@ -248,9 +252,9 @@ generateEnumJsonSchema :: Name -> [Name] -> Doc a
 generateEnumJsonSchema (Name klass) ctors =
   classmethod . method "json_schema" "cls" [] $ WL.vsep (
     googleDocstring
-      (Just . Docs $ "JSON schema for enumeration " <> klass <> ".")
+      (Just . Docs $ "JSON schema for '" <> klass <> "'.")
       []
-      Nothing
+      (Just "A Python dictionary describing the JSON schema.")
       []
     <> [
       "return " <> dict [
@@ -262,10 +266,10 @@ generateEnumJsonSchema (Name klass) ctors =
 
 generateEnumFromJson :: Name -> Doc a
 generateEnumFromJson (Name klass) =
-  classmethod . method "from_json" "cls" [(Name "data", Right "dict")] $ WL.vsep (
+  classmethod . method "from_json" "cls" [(Name "data", Left (GroundT StringT))] $ WL.vsep (
       googleDocstring
         (Just . Docs $ "Validate and parse JSON data into an instance of " <> klass <> ".")
-        [(Name "data", Variable (Name "dict"))] -- "JSON dictionary to validate and parse."
+        [(Name "data", GroundT StringT, "JSON data to validate and parse.")]
         (Just $ "An instance of " <> klass <> ".")
         [
           (Name "ValidationError", "When schema validation fails."),
@@ -292,7 +296,7 @@ generateEnumFromJson (Name klass) =
 generateEnumToJson :: Name -> Doc a
 generateEnumToJson _ =
   method "to_json" "self" [] $ WL.vsep (
-    googleDocstring (Just (Docs "Serialise this instance as JSON.")) [] (Just "A dictionary ready to serialise as JSON.") [] <> [
+    googleDocstring (Just (Docs "Serialise this instance as JSON.")) [] (Just "JSON data ready to be serialised.") [] <> [
     text "return self.value"
   ])
 
@@ -314,7 +318,7 @@ generateSuperJsonSchema (Name klass) =
     googleDocstring
       (Just . Docs $ "JSON schema for variant " <> klass <> ".")
       []
-      Nothing
+      (Just "A Python dictionary describing the JSON schema.")
       []
     <> [
       "adt_types = [klass.ADT_TYPE for klass in cls.__subclasses__()]",
@@ -337,7 +341,7 @@ generateSuperFromJson (Name klass) =
     WL.vsep (
       googleDocstring
         (Just . Docs $ "Validate and parse JSON data into an instance of " <> klass <> ".")
-        [(Name "data", Variable (Name "dict"))]
+        [(Name "data", Variable (Name "dict"), "JSON data to validate and parse.")]
         (Just $ "An instance of " <> klass <> ".")
         [
           (Name "ValidationError", "When schema validation fails."),
@@ -383,7 +387,12 @@ wrapperserde n field =
 generateWrapperJsonSchema :: Name -> (Name, Type) -> Doc a
 generateWrapperJsonSchema (Name n) (Name _, t) =
   classmethod . method "json_schema" "cls" [] $ WL.vsep (
-    googleDocstring (Just . Docs $ "Return the JSON schema for " <> n <> " data.") [] (Just "JSON schema dictionary.") [] <> [
+    googleDocstring
+      (Just . Docs $ "Return the JSON schema for " <> n <> " data.")
+      []
+      (Just "A Python dictionary describing the JSON schema.")
+      [] <>
+    [
       "return" <+> schemaType t
     ]
   )
@@ -391,10 +400,10 @@ generateWrapperJsonSchema (Name n) (Name _, t) =
 
 generateWrapperFromJson :: Name -> (Name, Type) -> Doc a
 generateWrapperFromJson (Name klass) (Name f, ty) =
-  classmethod . method "from_json" "cls" [(Name "data", Right "dict")] $ WL.vsep (
+  classmethod . method "from_json" "cls" [(Name "data", Left ty)] $ WL.vsep (
       googleDocstring
         (Just . Docs $ "Validate and parse JSON data into an instance of " <> klass <> ".")
-        [(Name "data", Variable (Name "dict"))] -- "JSON dictionary to validate and parse."
+        [(Name "data", ty, "JSON data to validate and parse.")]
         (Just $ "An instance of " <> klass <> ".")
         [
           (Name "ValidationError", "When schema validation fails."),
@@ -427,7 +436,7 @@ generateWrapperToJson _ (f, ty) =
     Name field = M.findWithDefault f f (mangleNames (S.singleton f))
   in
     method "to_json" "self" [] $ WL.vsep (
-      googleDocstring (Just (Docs "Serialise this instance as JSON.")) [] (Just "A dictionary ready to serialise as JSON.") [] <> [
+      googleDocstring (Just (Docs "Serialise this instance as JSON.")) [] (Just "Data ready to serialise as JSON.") [] <> [
       text "return " <> serialiseType ("self." <> text field) ty
     ])
 
@@ -448,7 +457,7 @@ serde n flds =
 generateJsonSchema :: Name -> [(Name, Type)] -> Doc a
 generateJsonSchema (Name n) flds =
     classmethod . method "json_schema" "cls" [] $ WL.vsep (
-      googleDocstring (Just (Docs $ "Return the JSON schema for " <> n <> " data.")) [] (Just "JSON schema dictionary.") [] <> [
+      googleDocstring (Just (Docs $ "Return the JSON schema for " <> n <> " data.")) [] (Just "A Python dictionary describing the JSON schema.") [] <> [
       "return" <+> dict [
         ("type", WL.dquotes "object"),
         ("properties", dict (
@@ -506,7 +515,7 @@ generateToJson _ fieldDefs =
       (p, serialiseType ("self." <> text f) ty)
   in
     method "to_json" "self" [] $ WL.vsep (
-      googleDocstring (Just (Docs "Serialise this instance as JSON.")) [] (Just "A dictionary ready to serialise as JSON.") [] <> [
+      googleDocstring (Just (Docs "Serialise this instance as JSON.")) [] (Just "Data ready to serialise as JSON.") [] <> [
       text "return " <> dict (
         (discriminatorProperty, "self.ADT_TYPE") : fmap serialiseField properties
       )
@@ -518,15 +527,15 @@ generateFromJson (Name klass) fieldDefs =
     mangle = mangleNames . S.fromList . fmap fst $ fieldDefs
     -- (fieldName, jsonProperty, type)
     properties = fmap (\(n, t) -> (M.findWithDefault n n mangle, n, t)) fieldDefs
-    parseField (Name f, Name p, MaybeT ty) =
-      text f <> "=" <> parseType ("data.get(\"" <> p <> "\", None)") ty <> ","
+    parseField (Name f, Name p, ty@(MaybeT _)) =
+      text f <> "=" <> parseType ("data.get(" <> WL.dquotes (text p) <> ", None)") ty <> ","
     parseField (Name f, Name p, ty) =
-      text f <> "=" <> parseType ("data[\"" <> p <> "\"]") ty <> ","
+      text f <> "=" <> parseType ("data[" <> WL.dquotes (text p) <> "]") ty <> ","
   in
     classmethod . method "from_json" "cls" [(Name "data", Right "dict")] $ WL.vsep (
       googleDocstring
         (Just . Docs $ "Validate and parse JSON data into an instance of " <> klass <> ".")
-        [(Name "data", Variable (Name "dict"))] -- "JSON dictionary to validate and parse."
+        [(Name "data", Variable (Name "dict"), "JSON data to validate and parse.")]
         (Just $ "An instance of " <> klass <> ".")
         [
           (Name "ValidationError", "When schema validation fails."),
@@ -561,25 +570,25 @@ serialiseType value ty = case ty of
     LongT -> value
     DoubleT -> value
     UUIDT -> "str(" <> value <> ")"
-    DateT -> value <> ".strfmt('%Y-%m-%d')"
-    DateTimeT -> value <> ".strfmt('%Y-%m-%dT%H:%M:%S.%f%z')"
+    DateT -> value <> ".isoformat()"
+    DateTimeT -> value <> ".strfmt('%Y-%m-%dT%H:%M:%S.%f%z')" -- TODO: We should force timezones?
   ListT ty' -> "[" <> serialiseType "v" ty' <> " for v in " <> value <> "]"
-  MaybeT ty' -> "(lambda v: " <> serialiseType "v" ty' <> " if v is not None else None)(" <> value <> ")"
+  MaybeT ty' -> "(" <> "lambda v: v and " <> serialiseType "v" ty' <> ")(" <> value <> ")"
 
-parseType :: Text -> Type -> Doc a
+parseType :: Doc a -> Type -> Doc a
 parseType value ty = case ty of
-  Variable (Name t) -> text t <> ".from_json(" <> text value <> ")"
+  Variable (Name t) -> text t <> ".from_json(" <> value <> ")"
   GroundT gr -> case gr of
-    StringT -> "str(" <> text value <> ")"
-    BoolT -> "bool(" <> text value <> ")" -- TODO: This is wrong
-    IntT -> "int(" <> text value <> ")"
-    LongT -> "int(" <> text value <> ")"
-    DoubleT -> "float(" <> text value <> ")"
-    UUIDT -> "UUID(hex=" <> text value <> ")"
-    DateT -> "datetime.date()"
-    DateTimeT -> "datetime.datetime()"
-  ListT ty' -> "[" <> parseType "v" ty' <> " for v in " <> text value <> "]"
-  MaybeT ty' -> "(lambda v: " <> parseType "v" ty' <> " if v is not None else None)(" <> text value <> ")"
+    StringT -> "str(" <> value <> ")"
+    BoolT -> "bool(" <> value <> ")" -- TODO: This is wrong
+    IntT -> "int(" <> value <> ")"
+    LongT -> "int(" <> value <> ")"
+    DoubleT -> "float(" <> value <> ")"
+    UUIDT -> "uuid.UUID(hex=" <> value <> ")"
+    DateT -> "datetime.date.fromisoformat" <> WL.parens value
+    DateTimeT -> "datetime.datetime.strptime("<> value <> ", '%Y-%m-%dT%H:%M:%S.%f%z')"
+  ListT ty' -> "[" <> parseType "v" ty' <> " for v in " <> value <> "]"
+  MaybeT ty' -> "(" <> "lambda v: v and " <> parseType "v" ty' <> ")(" <> value <> ")"
 
 -- -----------------------------------------------------------------------------
 

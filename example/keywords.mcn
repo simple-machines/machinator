@@ -9,6 +9,9 @@ data Alt = One | Two | Three
 {- | Funny numbers. -}
 newtype BadAlt = { what: Alt }
 
+{- | Hello. -}
+newtype Ver = { this: UUID }
+
 {- | Check keyword handling in destination languages. -}
 data Foo
     = {- | An example of Python keywords. -}
@@ -16,11 +19,13 @@ data Foo
         id: ExampleId,
         from: Int,
         to: Int,
-        class: String
+        class: String,
+        ver: Maybe Ver
       }
     | {- | An example of Haskell keywords. -}
       Haskell {
         type: String,
         class: Bool,
-        wot: BadAlt
+        wot: BadAlt,
+        yes: Maybe (List Ver)
       }
