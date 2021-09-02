@@ -32,6 +32,7 @@ library
   exposed-modules:
                        Machinator.Python
                        Machinator.Python.Data.Types
+                       Machinator.Python.Mangle
                        Machinator.Python.Scheme.Types
                        Machinator.Python.Scheme.Types.Codegen
 

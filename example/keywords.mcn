@@ -1,0 +1,15 @@
+-- machinator @ v2
+
+{- | Check keyword handling in destination languages. -}
+data Foo
+    = {- | An example of Python keywords. -}
+      Python {
+        from: Int,
+        to: Int,
+        class: String
+      }
+    | {- | An example of Haskell keywords. -}
+      Haskell {
+        type: String,
+        class: Bool
+      }

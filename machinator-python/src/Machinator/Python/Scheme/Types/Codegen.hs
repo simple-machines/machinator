@@ -8,6 +8,8 @@ module Machinator.Python.Scheme.Types.Codegen (
 
 
 import           Data.List.NonEmpty (NonEmpty (..))
+import qualified Data.Map.Strict as M
+import qualified Data.Set as S
 import qualified Data.Text as T
 import qualified Data.Text.Lazy as TL
 
@@ -19,6 +21,7 @@ import           P
 import           Text.PrettyPrint.Annotated.WL (Doc, (<+>))
 import qualified Text.PrettyPrint.Annotated.WL as WL
 
+import           Machinator.Python.Mangle
 
 -- | Generates a type declaration for the given definition.
 genTypesV1 :: Definition -> Text
@@ -78,26 +81,13 @@ genTypeV1 ty =
 
 -- -----------------------------------------------------------------------------
 
-string :: [Char] -> Doc a
-string =
-  WL.text
-
-text :: Text -> Doc a
-text =
-  WL.text . T.unpack
-
-renderText :: Doc a -> Text
-renderText =
-  TL.toStrict . WL.displayT . WL.renderPretty 0.8 100
-
-comment :: Docs -> Doc a
-comment (Docs docs) = WL.vsep $ (text "# " <>) . text . T.strip <$> T.lines docs
-
 googleDocstring :: Maybe Docs -> [(Name, Type)] -> Maybe Text -> [Doc a]
 googleDocstring Nothing [] Nothing = []
 googleDocstring (Just (Docs docs)) [] Nothing = ["\"\"\"" WL.<> text (T.strip docs) WL.<> "\"\"\""]
 googleDocstring mDocs flds mRet =
   let
+    mangle = mangleNames . S.fromList $ fmap fst flds
+    args (nm@(Name n), ty) = (M.findWithDefault nm nm mangle, ty, Docs ("The '" <> n <> "' field."))
     trimmed = case mDocs of
       Just (Docs docs) -> [text $ T.stripEnd (T.unlines (T.strip <$> T.lines docs))]
       Nothing -> mempty
@@ -106,17 +96,28 @@ googleDocstring mDocs flds mRet =
       Just t ->  [WL.line <> "Returns:" WL.<#> WL.indent 4 (text t) <> WL.line]
   in
     [
-      "\"\"\"" <> WL.vsep (trimmed <> arguments flds <> ret) WL.<#>
+      "\"\"\"" <> WL.vsep (trimmed <> arguments (fmap args flds) <> ret) WL.<#>
       "\"\"\""
     ]
 
-arguments :: [(Name, Type)] -> [Doc a]
+arguments :: [(Name, Type, Docs)] -> [Doc a]
 arguments [] = mempty
 arguments flds = [
     WL.line <> "Args:" WL.<#> WL.indent 4 (
-      WL.vsep $ fmap (\(Name n, ty) -> text n <> " (" <> genTypeV1 ty <> "): A data field") flds
+      WL.vsep $ fmap (\(Name n, ty, Docs d) -> text n <> " (" <> genTypeV1 ty <> "): " <> text d) flds
     )
   ]
+
+
+-- | Predicate: Is a variant type an enumeration?
+isEnum :: [(Name, Maybe Docs, [(Name, Type)])] -> Bool
+isEnum [] = False
+isEnum cs = go cs
+  where
+    go [] = True
+    go ((_, _, []):rs) = go rs
+    go _ = False
+
 
 -- | Generates a Python enumeration.
 enum :: Name -> Maybe Docs -> [(Name, Maybe Docs, [(Name, Type)])] -> Doc a
@@ -135,38 +136,51 @@ superclass (Name n) mDoc =
     [ "@dataclasses.dataclass(frozen=True)"
     , "class" <+> text n <> ":"
     , WL.indent 4 . WL.vsep $ (
-      googleDocstring mDoc [] Nothing <>
-      [""] <>
-      [
-        "ADT_TYPE: typing.ClassVar[str] = ''",
-        "adt_type: str = dataclasses.field(default=ADT_TYPE, init=False, repr=False)"
-      ]
-    )
+        googleDocstring mDoc [] Nothing <>
+        [""] <>
+        [
+          "ADT_TYPE: typing.ClassVar[str] = ''",
+          "adt_type: str = dataclasses.field(default=ADT_TYPE, init=False, repr=False)"
+        ]
+      )
     ]
+
 
 -- | Generates a Python dataclass.
 dataclass :: Name -> Maybe Name -> Maybe Docs -> [(Name, Type)] -> Doc a
-dataclass name@(Name n) super mDoc flds =
-  WL.linebreak WL.<#>
-  WL.vsep
-    [ string "@dataclasses.dataclass(frozen=True)"
-    , string "class" <+> text n <> extends <> string ":"
-    , WL.indent 4 . WL.vsep $ (
-        googleDocstring mDoc flds Nothing <>
-        [""] <>
-        fields flds <>
-        serde name flds
-      )
-    ]
-  where
+dataclass name@(Name n) super mDoc fieldDefs =
+  let
     extends =
       case super of
-        Nothing -> WL.mempty
         Just (Name sn) -> WL.parens $ text sn
+        Nothing        -> WL.mempty
+  in
+    WL.linebreak WL.<#>
+    WL.vsep
+      [ string "@dataclasses.dataclass(frozen=True)"
+      , string "class" <+> text n <> extends <> string ":"
+      , WL.indent 4 . WL.vsep $ (
+          googleDocstring mDoc fieldDefs Nothing <>
+          [""] <>
+          fields fieldDefs <>
+          serde name fieldDefs
+        )
+      ]
 
+
+-- | Generates Python dataclass definitions.
+--
+-- Note that names are mangled according to Python lexical rules.
 fields :: [(Name, Type)] -> [Doc a]
-fields = fmap (\(Name n, t) -> text n WL.<> WL.char ':' WL.<+> genTypeV1 t)
+fields fs =
+  let
+    mangle = mangleNames . S.fromList . fmap fst $ fs
+    field (nm, ty) = case M.findWithDefault nm nm mangle of
+      Name n -> text n WL.<> WL.char ':' WL.<+> genTypeV1 ty
+  in fmap field fs
 
+
+-- | Generates JSON de-/serialise methods for a Python dataclass.
 serde :: Name -> [(Name, Type)] -> [Doc a]
 serde n flds =
   [ WL.mempty
@@ -177,30 +191,8 @@ serde n flds =
   , generateToJson n flds
   ]
 
-classmethod :: Doc a -> Doc a
-classmethod body =
-    WL.vsep [
-      string "@classmethod", body
-    ]
 
-method :: Text -> [(Name, Either Type Text)] -> Doc a -> Doc a
-method name args body =
-    WL.vsep [
-      string "def" WL.<+> text name <> WL.encloseSep WL.lparen WL.rparen WL.comma (string "self" : fmap arg args) WL.<> WL.char ':'
-    , WL.indent 4 body
-    ]
-
-arg :: (Name, Either Type Text) -> Doc a
-arg (Name n, t) = text n WL.<> WL.char ':' WL.<+> either genTypeV1 text t
-
-isEnum :: [(Name, Maybe Docs, [(Name, Type)])] -> Bool
-isEnum [] = False
-isEnum cs = go cs
-  where
-    go [] = True
-    go ((_, _, []):rs) = go rs
-    go _ = False
-
+-- | Generate the JSON schema method for a Python dataclass.
 generateJsonSchema :: Name -> [(Name, Type)] -> Doc a
 generateJsonSchema (Name n) flds =
     classmethod . method "json_schema" [] $ WL.vsep (
@@ -209,7 +201,7 @@ generateJsonSchema (Name n) flds =
         WL.line <>
         WL.indent 4 (WL.vsep
           [ "type=\"object\","
-          , "properties=dict(" WL.<#> WL.indent 4 (WL.vsep (fmap fieldSchema flds)) WL.<#> "),"
+          , "properties={" WL.<#> WL.indent 4 (WL.vsep (fmap fieldSchema flds)) WL.<#> "},"
           , "required=[" WL.<#> (WL.indent 4 . WL.vsep $ flds >>= requiredField) WL.<#> "]"
         ]) <>
         WL.line
@@ -217,12 +209,13 @@ generateJsonSchema (Name n) flds =
     ])
   where
     fieldSchema (Name f, ty) =
-      text f <> "=" <> schemaType ty <> ","
+      WL.dquotes (text f) <> ": " <> schemaType ty <> ","
     requiredField (Name f, ty) =
       case ty of
         MaybeT _ -> []
         _        -> [WL.dquotes (text f) <> ","]
 
+-- | Generate the Python encoding of the JSON schema for a type.
 schemaType :: Type -> Doc a
 schemaType ty =
   case ty of
@@ -244,30 +237,46 @@ schemaType ty =
       ])
      WL.<#> "])"
 
+-- | Generate the JSON serialisation method for a dataclass.
+--
+-- Note that names have been mangled according to Python lexical rules. See 'fields'
 generateToJson :: Name -> [(Name, Type)] -> Doc a
-generateToJson _ flds =
+generateToJson _ fieldDefs =
+  let
+    mangle = mangleNames (S.fromList (fmap fst fieldDefs))
+    -- (fieldName, jsonProperty, type)
+    properties = fmap (\(n, t) -> (M.findWithDefault n n mangle, n, t)) fieldDefs
+    serialiseField (Name f, Name p, ty) =
+      WL.dquotes (text p) <> ": " <> serialiseType ("self." <> text f) ty <> ","
+  in
     method "to_json" [] $ WL.vsep (
       googleDocstring (Just (Docs "Serialise this instance as JSON.")) [] (Just "A dictionary ready to serialise as JSON.") <> [
-      text "return dict" <> WL.parens (
+      text "return " <> WL.braces (
         WL.line <>
-        WL.indent 4 (WL.vsep (fmap serialiseField flds)) <>
+        WL.indent 4 (WL.vsep (fmap serialiseField properties)) <>
         WL.line
       )
     ])
-  where
-    serialiseField (Name f, ty) =
-      text f <> "=" <> serialiseType ("self." <> text f) ty <> ","
 
 generateFromJson :: Name -> [(Name, Type)] -> Doc a
-generateFromJson (Name n) flds =
+generateFromJson (Name klass) fieldDefs =
+  let
+    mangle = mangleNames . S.fromList . fmap fst $ fieldDefs
+    -- (fieldName, jsonProperty, type)
+    properties = fmap (\(n, t) -> (M.findWithDefault n n mangle, n, t)) fieldDefs
+    parseField (Name f, Name p, MaybeT ty) =
+      text f <> "=" <> parseType ("data.get(\"" <> p <> "\", None)") ty <> ","
+    parseField (Name f, Name p, ty) =
+      text f <> "=" <> parseType ("data[\"" <> p <> "\"]") ty <> ","
+  in
     classmethod . method "from_json" [(Name "data", Right "dict")] $ WL.vsep [
-      "\"\"\"" <> "Validate and parse JSON data into an instance of " <> text n <> "." WL.<#>
+      "\"\"\"" <> "Validate and parse JSON data into an instance of " <> text klass <> "." WL.<#>
       WL.line <>
       "Args:" WL.<#>
       WL.indent 4 "data (dict): JSON dictionary to validate and parse." WL.<#>
       WL.line <>
       "Returns:" WL.<#>
-      WL.indent 4 "An instance of " <> text n <> "." WL.<#>
+      WL.indent 4 "An instance of " <> text klass <> "." WL.<#>
       WL.line <>
       "Raises:" WL.<#>
       WL.indent 4 ( WL.vsep [
@@ -281,20 +290,15 @@ generateFromJson (Name n) flds =
           "data",
           "self.json_schema()"
         ],
-        text "return" WL.<+> text n <> WL.parens
-          (WL.line <> (WL.indent 4 . WL.vsep $ fmap parseField flds) <> WL.line)
+        text "return" WL.<+> text klass <> WL.parens
+          (WL.line <> (WL.indent 4 . WL.vsep $ fmap parseField properties) <> WL.line)
       ],
       "except jsonschema.exceptions.ValidationError as ex:",
       WL.indent 4 . WL.vsep $ [
-        "logging.debug(\"Invalid JSON data received while parsing " <> text n <> "\", exc_info=ex)",
+        "logging.debug(\"Invalid JSON data received while parsing " <> text klass <> "\", exc_info=ex)",
         "raise"
       ]
     ]
-  where
-    parseField (Name f, MaybeT ty) =
-      text f <> "=" <> parseType ("data.get(\"" <> f <> "\", None)") ty <> ","
-    parseField (Name f, ty) =
-      text f <> "=" <> parseType ("data[\"" <> f <> "\"]") ty <> ","
 
 serialiseType :: Doc a -> Type -> Doc a
 serialiseType value ty = case ty of
@@ -325,3 +329,37 @@ parseType value ty = case ty of
     DateTimeT -> "datetime.datetime()"
   ListT ty' -> "[" <> parseType "v" ty' <> " for v in " <> text value <> "]"
   MaybeT ty' -> "(lambda v: " <> parseType "v" ty' <> " if v is not None else None)(" <> text value <> ")"
+
+-- -----------------------------------------------------------------------------
+
+classmethod :: Doc a -> Doc a
+classmethod body =
+  WL.vsep [
+    string "@classmethod", body
+  ]
+
+method :: Text -> [(Name, Either Type Text)] -> Doc a -> Doc a
+method name args body =
+  WL.vsep [
+    string "def" WL.<+> text name <> WL.encloseSep WL.lparen WL.rparen WL.comma (string "self" : fmap arg args) WL.<> WL.char ':'
+  , WL.indent 4 body
+  ]
+
+arg :: (Name, Either Type Text) -> Doc a
+arg (Name n, t) =
+  text n WL.<> WL.char ':' WL.<+> either genTypeV1 text t
+
+string :: [Char] -> Doc a
+string =
+  WL.text
+
+text :: Text -> Doc a
+text =
+  WL.text . T.unpack
+
+comment :: Docs -> Doc a
+comment (Docs docs) = WL.vsep $ (text "# " <>) . text . T.strip <$> T.lines docs
+
+renderText :: Doc a -> Text
+renderText =
+  TL.toStrict . WL.displayT . WL.renderPretty 0.8 100
