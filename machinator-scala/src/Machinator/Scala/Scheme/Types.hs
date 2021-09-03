@@ -7,7 +7,6 @@ import qualified Data.Char as Char
 import           Data.Map.Strict (Map)
 import qualified Data.Map.Strict as M
 import           Data.Set (Set)
-import qualified Data.Set as S
 import qualified Data.Text as T
 
 import           Machinator.Core
@@ -31,7 +30,7 @@ types v ds =
 typesV1 :: [DefinitionFile] -> Either ScalaTypesError [(FilePath, Text)]
 typesV1 dfs =
   let DefinitionFileGraph fg = MG.buildFileGraph dfs
-      mg = M.mapKeys filePathToModuleName (fmap (S.map filePathToModuleName) fg)
+      mg = M.mapKeys filePathToModuleName (fmap (M.keysSet . M.mapKeys filePathToModuleName) fg)
   in for dfs $ \(DefinitionFile fp defs) ->
        let mn = filePathToModuleName fp in
        pure (genFileName mn, renderModule mn mg defs)

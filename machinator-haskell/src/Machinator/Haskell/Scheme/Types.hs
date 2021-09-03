@@ -37,7 +37,7 @@ types v ds =
 typesV1 :: [DefinitionFile] -> Either HaskellTypesError [(FilePath, Text)]
 typesV1 dfs =
   let DefinitionFileGraph fg = MG.buildFileGraph dfs
-      mg = M.mapKeys filePathToModuleName (fmap (S.map filePathToModuleName) fg)
+      mg = M.mapKeys filePathToModuleName (fmap (M.keysSet . M.mapKeys filePathToModuleName) fg)
   in for dfs $ \(DefinitionFile fp defs) ->
        let mn = filePathToModuleName fp in
        pure (genFileName mn, renderModule mn mg defs)

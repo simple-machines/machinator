@@ -11,6 +11,7 @@ import qualified Data.Set as S
 import qualified Data.Text as T
 
 import           Machinator.Core
+import           Machinator.Core.Data.Definition
 import qualified Machinator.Core.Graph as MG
 import           Machinator.Python.Data.Types
 import qualified Machinator.Python.Scheme.Types.Codegen as Codegen
@@ -30,14 +31,14 @@ types v ds =
 typesV1 :: [DefinitionFile] -> Either PythonTypesError [(FilePath, Text)]
 typesV1 dfs =
   let DefinitionFileGraph fg = MG.buildFileGraph dfs
-      mg = M.mapKeys filePathToModuleName (fmap (S.map filePathToModuleName) fg)
+      mg = M.mapKeys filePathToModuleName (fmap (M.mapKeys filePathToModuleName) fg)
   in for dfs $ \(DefinitionFile fp defs) ->
        let mn = filePathToModuleName fp in
        pure (genFileName mn, renderModule fp mn mg defs)
 
 -- -----------------------------------------------------------------------------
 
-renderModule :: FilePath -> ModuleName -> Map ModuleName (Set ModuleName) -> [Definition] -> Text
+renderModule :: FilePath -> ModuleName -> Map ModuleName (Map ModuleName (Set Name)) -> [Definition] -> Text
 renderModule fp mn@(ModuleName n) imports defs =
   T.unlines (
     [ "\"\"\"Generated implementation of " <> n <> ".\"\"\""
@@ -55,13 +56,16 @@ renderModule fp mn@(ModuleName n) imports defs =
     , "import typing  # noqa: F401"
     , "import jsonschema  # noqa: F401"
     ]
-    <> maybe mempty (("":) . fmap renderImport . toList) (mfilter (not . null) $ M.lookup mn imports)
+    <> maybe mempty (("":) . fmap renderImport . M.toList) (mfilter (not . null) $ M.lookup mn imports)
     <> with defs Codegen.genTypesV1
   )
 
-renderImport :: ModuleName -> Text
-renderImport (ModuleName n) =
-  "from " <> n <> " import *"
+renderImport :: (ModuleName, Set Name) -> Text
+renderImport (ModuleName n, ns) =
+  let
+    imports = (T.intercalate ", " . fmap unName . S.toAscList) ns
+  in
+    "from " <> n <> " import " <> imports
 
 
 -- -----------------------------------------------------------------------------

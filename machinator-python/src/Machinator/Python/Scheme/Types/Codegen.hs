@@ -95,39 +95,37 @@ googleDocstring
   -> [Doc a]
 googleDocstring Nothing [] Nothing _ = []
 googleDocstring (Just (Docs docs)) [] Nothing _ = ["\"\"\"" WL.<> text (T.strip docs) WL.<> "\"\"\""]
-googleDocstring mDocs flds mRet exc =
+googleDocstring mDocs flds mRet excs =
   let
     -- Mangle the field names.
     mangle = mangleNames . S.fromList $ fmap (\(a, _, _) -> a) flds
 
-    arg (nm, ty, comment) = text (unName (M.findWithDefault nm nm mangle)) <> " (" <> genTypeV1 ty <> "): " <> text comment
-    arguments =
-      case flds of
-        [] -> mempty
-        _ -> [
-            WL.line <> "Args:" WL.<#> WL.indent 4 (
-              WL.vsep $ fmap arg flds
-            )
-          ]
-    trimmed = case mDocs of
+    description = case mDocs of
       Just (Docs docs) -> text . T.strip <$> T.lines docs
       Nothing -> mempty
-    ret = case mRet of
-      Nothing -> mempty
-      Just t ->  [WL.line <> "Returns:" WL.<#> WL.indent 4 (text t)]
-    exceptions = case exc of
-      [] -> mempty
-      _ -> [
-          WL.line <> "Raises:" WL.<#> WL.indent 4 (
-            WL.vsep $ fmap (\(Name n, d) -> text n <> ": " <> text d) exc
-          )
-        ]
-  in
-    [
-      "\"\"\"" <> WL.vsep (trimmed <> arguments <> ret <> exceptions) WL.<#>
-      "\"\"\""
-    ]
 
+    arg (nm, ty, comment) = text (unName (M.findWithDefault nm nm mangle)) <> " (" <> genTypeV1 ty <> "): " <> text comment
+    argumentsSection =
+      case flds of
+        [] -> mempty
+        _ -> ["Args:" WL.<#> WL.indent 4 (WL.vsep $ fmap arg flds)]
+
+    returnsSection = case mRet of
+      Nothing -> mempty
+      Just t ->  ["Returns:" WL.<#> WL.indent 4 (text t)]
+
+    exc (Name n, d) = text n <> ": " <> text d
+    raisesSection =
+      case excs of
+        [] -> mempty
+        _ -> ["Raises:" WL.<#> WL.indent 4 (WL.vsep $ fmap exc excs)]
+
+    docs = description <> argumentsSection <> returnsSection <> raisesSection
+  in
+    case docs of
+      []  -> mempty
+      [d] -> ["\"\"\"" <> d <> "\"\"\""]
+      ds  -> ["\"\"\"" <> WL.vcat (WL.punctuate WL.hardline ds) WL.<#> "\"\"\""]
 
 
 -- | Generate fields to describe the discriminator.
@@ -272,9 +270,9 @@ wrapperclass name@(Name n) super mDoc field =
       , string "class" <+> text n <> extends <> string ":"
       , WL.indent 4 . WL.vsep $ (
           googleDocstring mDoc [fieldDocstring field] Nothing [] <>
-          [""] <>
+          [mempty] <>
           discriminator name <>
-          [""] <>
+          [mempty] <>
           fields [field] <>
           serdeWrapper name field
         )

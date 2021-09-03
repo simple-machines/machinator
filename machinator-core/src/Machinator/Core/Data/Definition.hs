@@ -60,7 +60,7 @@ data Definition = Definition {
 -- | The module graph.
 -- Maps each file to the other files it depends on.
 newtype DefinitionFileGraph = DefinitionFileGraph {
-    unDefinitionFileGraph :: Map FilePath (Set FilePath)
+    unDefinitionFileGraph :: Map FilePath (Map FilePath (Set Name))
   } deriving (Eq, Ord, Show, Semigroup, Monoid, Data, Typeable, Generic)
 
 
