@@ -42,7 +42,7 @@ genTypesV1' (Definition name mDoc dec) =
     Variant (c1 :| cts)
       | isEnum (c1:cts) -> enum name mDoc (fmap (\(n, _, _) -> n) $ c1:cts)
       | otherwise       -> WL.vsep $
-                               variantclass name mDoc
+                               variantclass name mDoc (c1:cts)
                              : fmap (\(m, md, fs) -> dataclass m (Just name) md fs) (c1:cts)
 
     Record fts          -> dataclass name Nothing mDoc fts
@@ -357,19 +357,30 @@ generateToJsonWrapper _ (f, ty) =
 
 
 -- | Generate a wrapper class to encode a newtype.
-variantclass :: Name -> Maybe Docs -> Doc a
-variantclass name@(Name n) mDoc =
-  WL.linebreak WL.<#>
-  WL.vsep
-    [ "@dataclasses.dataclass(frozen=True)"
-    , "class" <+> text n <> ":"
-    , WL.indent 4 . WL.vsep $ (
-        googleDocstring mDoc [] Nothing [] <>
-        [""] <>
-        discriminator (Name "") <>
-        serdeVariant name
-      )
-    ]
+variantclass :: Name -> Maybe Docs -> [(Name, Maybe Docs, [(Name, Type)])] -> Doc a
+variantclass name@(Name n) mDoc ctors =
+  let
+    common = variantProperties ctors
+  in
+    WL.linebreak WL.<#>
+    WL.vsep
+      [ "@dataclasses.dataclass(frozen=True)"
+      , "class" <+> text n <> "(abc.ABC):"
+      , WL.indent 4 . WL.vsep $ (
+          googleDocstring mDoc (fmap fieldDocstring common) Nothing [] <>
+          [""] <>
+          discriminator (Name "") <>
+          fields common <>
+          serdeVariant name
+        )
+      ]
+
+
+-- | Find the set of common properties in the constructors of a variant.
+variantProperties :: [(Name, Maybe Docs, [(Name, Type)])] -> [(Name, Type)]
+variantProperties ctors =
+  let fs = fmap (\(_, _, f) -> S.fromList f) ctors
+  in S.toAscList (foldr S.intersection (S.unions fs) fs)
 
 
 -- | Generate JSON de-/serialise methods for a variant wrapperclass.
@@ -379,6 +390,8 @@ serdeVariant n =
   , generateJsonSchemaVariant n
   , WL.mempty
   , generateFromJsonVariant n
+  , WL.mempty
+  , generateToJsonVariant n
   ]
 
 
@@ -442,6 +455,15 @@ generateFromJsonVariant (Name klass) =
         ]
       ]
     )
+
+
+-- | Generate the JSON serialisation method for a dataclass.
+generateToJsonVariant :: Name -> Doc a
+generateToJsonVariant _ =
+  abstractmethod $ method "to_json" "self" [] $ WL.vsep (
+      googleDocstring (Just (Docs "Serialise this instance as JSON.")) [] (Just "Data ready to serialise as JSON.") [] <> [
+      "raise" <+> "NotImplementedError"
+    ])
 
 -- -----------------------------------------------------------------------------
 -- $ Constructors
@@ -638,6 +660,13 @@ parseType value ty = case ty of
 -- -----------------------------------------------------------------------------
 
 -- | Wrap a Python method definition in a classmethod decorator.
+abstractmethod :: Doc a -> Doc a
+abstractmethod body =
+  WL.vsep [
+    string "@abc.abstractmethod", body
+  ]
+
+-- | Wrap a Python method definition in a classmethod decorator.
 classmethod :: Doc a -> Doc a
 classmethod body =
   WL.vsep [
@@ -667,7 +696,7 @@ dict' fs =
 
 dict fields =
      "{" WL.<##> WL.vsep fields' WL.<##> "}"
-  where 
+  where
     prettyKVPair (k,v) = flatIndent 4 $ WL.dquotes (text k) <> ":" <+> v
     fields' = WL.punctuate "," $ fmap prettyKVPair fields
 

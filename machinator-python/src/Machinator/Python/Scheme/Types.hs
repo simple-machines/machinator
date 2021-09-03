@@ -48,6 +48,7 @@ renderModule fp mn@(ModuleName n) imports defs =
     , ""
     , "from __future__ import annotations"
     , ""
+    , "import abc  # noqa: F401"
     , "import dataclasses  # noqa: F401"
     , "import datetime  # noqa: F401"
     , "import enum  # noqa: F401"
@@ -65,7 +66,7 @@ renderImport (ModuleName n, ns) =
   let
     imports = (T.intercalate ", " . fmap unName . S.toAscList) ns
   in
-    "from " <> n <> " import " <> imports
+    "from .." <> n <> " import " <> imports
 
 
 -- -----------------------------------------------------------------------------
