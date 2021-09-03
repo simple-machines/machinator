@@ -11,16 +11,16 @@ import           Options.Applicative
 
 import           P
 
-import           System.Directory
+import           System.Directory (createDirectoryIfMissing)
 import           System.FilePath ((</>), takeDirectory, dropExtension)
 import           System.IO (IO, FilePath)
 import qualified System.IO as IO
+
 import           X.Control.Monad.Trans.Either (EitherT, hoistEither)
 import           X.Control.Monad.Trans.Either.Exit (orDie)
 
 import           Machinator.Core as Machinator
 import           Machinator.Python as Machinator
-
 
 data Options
   = Options
@@ -35,7 +35,6 @@ options :: Parser Options
 options = Options
   <$> strOption (long "target" <> metavar "DIR")
   <*> inputs
-
 
 main :: IO ()
 main = do

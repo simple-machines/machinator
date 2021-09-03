@@ -133,7 +133,7 @@ discriminator :: Name -> [Doc a]
 discriminator (Name klass) =
   [
     WL.vsep
-      [ "ADT_TYPE" <> ":" <+> "typing.ClassVar" <> WL.brackets "str" <+> "=" <+> WL.dquotes (text klass)
+      [ "ADT_TYPE" <> ":" <+> "typing.ClassVar" <> WL.brackets "str" <+> "=" <+> (WL.dquotes . text . T.toLower) klass
       , "adt_type" <> ":" <+> "str" <+> "=" <+> "dataclasses.field(init=False, repr=False, default=ADT_TYPE)"
       ]
   ]
@@ -173,7 +173,7 @@ enum n@(Name klass) mDoc ctors =
       string "class" WL.<+> text klass WL.<> WL.parens (string "enum.Enum") WL.<> ":",
       WL.indent 4 . WL.vsep $ (
         googleDocstring mDoc [] Nothing [] <>
-        fmap (\(Name m) -> WL.hsep [text m, WL.char '=', WL.dquotes $ text m]) ctors <>
+        fmap (\(Name m) -> WL.hsep [text m, WL.char '=', WL.dquotes $ text (T.toLower m)]) ctors <>
         serdeEnum n ctors
       )
   ]
@@ -203,7 +203,7 @@ generateJsonSchemaEnum (Name klass) ctors =
     <> [
       "return " <> dict [
         ("type", WL.dquotes "string"),
-        ("enum", list $ fmap (WL.dquotes . text . unName) ctors)
+        ("enum", list $ fmap (WL.dquotes . text . T.toLower . unName) ctors)
       ]
     ]
   )

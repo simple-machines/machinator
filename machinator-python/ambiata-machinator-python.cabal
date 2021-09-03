@@ -49,7 +49,7 @@ executable gen-python
                      , ambiata-p
                      , ambiata-x-eithert
                      , ambiata-x-optparse
-                     , filepath
+                     , filepath                        == 1.4.*
                      , optparse-applicative            >= 0.10       && < 1.0
                      , text                            == 1.2.*
                      , transformers                    >= 0.4        && < 0.7

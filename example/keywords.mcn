@@ -4,7 +4,7 @@
 newtype ExampleId = { id: Int }
 
 {- | Numbers. -}
-data Alt = One | Two | Three
+data Alt = One | Two | Three | LotsAndLots
 
 {- | Funny numbers. -}
 newtype BadAlt = { what: Alt }
