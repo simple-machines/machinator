@@ -11,6 +11,8 @@ import           Options.Applicative
 
 import           P
 
+import           System.Directory (createDirectoryIfMissing)
+import           System.FilePath ((</>), takeDirectory, dropExtension)
 import           System.IO (IO, FilePath)
 import qualified System.IO as IO
 
@@ -20,24 +22,34 @@ import           X.Control.Monad.Trans.Either.Exit (orDie)
 import           Machinator.Core as Machinator
 import           Machinator.Scala as Machinator
 
-
+data Options
+  = Options
+    { targetDirectory :: FilePath  -- ^ Directory to write output files.
+    , sourceFiles :: [FilePath]    -- ^ Input files.
+    }
 
 inputs :: Parser [FilePath]
 inputs = many (strArgument (metavar "machinator"))
 
+options :: Parser Options
+options = Options
+  <$> strOption (long "target" <> metavar "DIR")
+  <*> inputs
+
 main :: IO ()
 main = do
-  files       <- execParser opts
+  (Options out files) <- execParser opts
   definitions <- orDie (T.pack . show) $ parseData files
   results     <- orDie (T.pack . show) $ hoistEither $ typesV1 definitions
 
   for_ results $ \(fp, contents) -> do
-    IO.putStrLn fp
-    IO.putStrLn "===="
-    T.putStrLn contents
+    let dest = out </> fp
+    createDirectoryIfMissing True (takeDirectory dest)
+    T.writeFile dest contents
+    IO.putStrLn ("Created " <> dest )
 
   where
-    opts = info (inputs <**> helper)
+    opts = info (options <**> helper)
       ( fullDesc
      <> progDesc "Print a greeting for TARGET"
      <> header "hello - a test for optparse-applicative" )
