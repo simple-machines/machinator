@@ -31,7 +31,7 @@ import           Machinator.Python.Mangle
 discriminatorProperty :: Text
 discriminatorProperty = "adt_type"
 
-genImportsV1 :: Name -> Set Name -> Text 
+genImportsV1 :: Name -> Set Name -> Text
 genImportsV1 (Name n) ns =
     renderText $
       "from" <+> ".." <> text n <+> "import" <+> imports
@@ -138,15 +138,21 @@ googleDocstring mDocs flds mRet excs =
 
 
 -- | Generate fields to describe the discriminator.
-discriminator :: Name -> [Doc a]
-discriminator (Name klass) =
-  [
-    "",
-    WL.vsep
-      [ "ADT_TYPE" <> ":" <+> "typing.ClassVar" <> WL.brackets "str" <+> "=" <+> (WL.dquotes . text . T.toLower) klass
-      , "adt_type" <> ":" <+> "str" <+> "=" <+> "dataclasses.field(init=False, repr=False, default=ADT_TYPE)"
-      ]
-  ]
+discriminator
+  :: Name       -- ^ Name of the type
+  -> Maybe Name -- ^ Name of the supertype
+  -> [Doc a]
+discriminator _ Nothing = []
+discriminator (Name klass) (Just (Name super)) =
+    [
+      "",
+      WL.vsep
+        [ "ADT_TYPE" <> ":" <+> "typing.ClassVar" <> WL.brackets "str" <+> "=" <+> (WL.dquotes . text) name
+        , "adt_type" <> ":" <+> "str" <+> "=" <+> "dataclasses.field(init=False, repr=False, default=ADT_TYPE)"
+        ]
+    ]
+  where
+    name = T.toLower $ if super `T.isSuffixOf` klass then T.dropEnd (T.length super) klass else klass
 
 
 -- | Generates Python dataclass definitions.
@@ -281,7 +287,7 @@ wrapperclass name@(Name n) super mDoc field =
       , string "class" <+> text n <> extends <> string ":"
       , WL.indent 4 . WL.vsep $ (
           googleDocstring mDoc [fieldDocstring field] Nothing [] <>
-          discriminator name <>
+          discriminator name super <>
           fields [field] <>
           serdeWrapper name field
         )
@@ -377,7 +383,7 @@ variantclass name@(Name n) mDoc ctors =
       , "class" <+> text n <> "(abc.ABC):"
       , WL.indent 4 . WL.vsep $ (
           googleDocstring mDoc (fmap fieldDocstring common) Nothing [] <>
-          discriminator (Name "") <>
+          discriminator (Name "") (Just (Name "")) <>
           fields common <>
           serdeVariant name
         )
@@ -456,7 +462,7 @@ generateFromJsonVariant (Name klass) =
                   "return" <+> "klass.from_json(data)"
                 )
             ),
-          "raise "
+          "raise" <+> "ValueError(" <> WL.dquotes "Unknown adt_type: '{ty}'" <> ".format(ty=adt_type)" <> ")"
         ],
         "except jsonschema.exceptions.ValidationError as ex:",
         WL.indent 4 . WL.vsep $ [
@@ -495,44 +501,44 @@ dataclass name@(Name n) super mDoc fieldDefs =
       , string "class" <+> text n <> extends <> string ":"
       , WL.indent 4 . WL.vsep $ (
           googleDocstring mDoc (fmap fieldDocstring fieldDefs) Nothing [] <>
-          discriminator name <>
+          discriminator name super <>
           fields fieldDefs <>
-          serde name fieldDefs
+          serde name (isJust super) fieldDefs
         )
       ]
 
 
 -- | Generates JSON de-/serialise methods for a Python dataclass.
-serde :: Name -> [(Name, Type)] -> [Doc a]
-serde n flds =
+serde :: Name -> Bool -> [(Name, Type)] -> [Doc a]
+serde n disc flds =
   [ WL.mempty
-  , generateJsonSchema n flds
+  , generateJsonSchema n disc flds
   , WL.mempty
   , generateFromJson n flds
   , WL.mempty
-  , generateToJson n flds
+  , generateToJson n disc flds
   ]
 
 
 -- | Generate the JSON schema method for a Python dataclass.
-generateJsonSchema :: Name -> [(Name, Type)] -> Doc a
-generateJsonSchema (Name n) flds =
+generateJsonSchema :: Name -> Bool -> [(Name, Type)] -> Doc a
+generateJsonSchema (Name n) disc flds =
     classmethod . method "json_schema" "cls" [] $ WL.vsep (
       googleDocstring (Just (Docs $ "Return the JSON schema for " <> n <> " data.")) [] (Just "A Python dictionary describing the JSON schema.") [] <> [
       "return" <+> dict [
         ("type", WL.dquotes "object"),
-        ("properties", dict (
-          (discriminatorProperty, dict [
-            ("type", WL.dquotes "string"),
-            ("enum", WL.list ["cls.ADT_TYPE"])
-          ]) :
-          fmap fieldSchema flds
-        )),
-        ("required", list $ WL.dquotes (text discriminatorProperty) : (flds >>= requiredField)
-        )
+        ("properties", dict (discriminatorField disc <> fmap fieldSchema flds)),
+        ("required", list $  discriminatorRequired disc <> (flds >>= requiredField))
       ]
     ])
   where
+    discriminatorRequired :: Bool -> [Doc a]
+    discriminatorRequired False = []
+    discriminatorRequired True = [WL.dquotes (text discriminatorProperty)]
+    discriminatorField :: Bool -> [(Text, Doc a)]
+    discriminatorField False = []
+    discriminatorField True =
+      [(discriminatorProperty, dict [("type", WL.dquotes "string"), ("enum", WL.list ["cls.ADT_TYPE"])])]
     fieldSchema :: (Name, Type) -> (Text, Doc a)
     fieldSchema (Name f, ty) = (f, schemaType ty)
     requiredField (Name f, ty) =
@@ -542,19 +548,21 @@ generateJsonSchema (Name n) flds =
 
 
 -- | Generate the JSON serialisation method for a dataclass.
-generateToJson :: Name -> [(Name, Type)] -> Doc a
-generateToJson _ fieldDefs =
+generateToJson :: Name -> Bool -> [(Name, Type)] -> Doc a
+generateToJson _ disc fieldDefs =
   let
     mangle = mangleNames (S.fromList (fmap fst fieldDefs))
     -- (fieldName, jsonProperty, type)
     properties = fmap (\(n, t) -> (M.findWithDefault n n mangle, n, t)) fieldDefs
     serialiseField (Name f, Name p, ty) =
       (p, serialiseType ("self." <> text f) ty)
+    discriminatorField False = []
+    discriminatorField True = [(discriminatorProperty, "self.ADT_TYPE")]
   in
     method "to_json" "self" [] $ WL.vsep (
       googleDocstring (Just (Docs "Serialise this instance as JSON.")) [] (Just "Data ready to serialise as JSON.") [] <> [
       text "return " <> dict (
-        (discriminatorProperty, "self.ADT_TYPE") : fmap serialiseField properties
+        discriminatorField disc <> fmap serialiseField properties
       )
     ])
 
