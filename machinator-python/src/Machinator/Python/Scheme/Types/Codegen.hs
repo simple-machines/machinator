@@ -94,14 +94,14 @@ googleDocstring
   -> [(Name, Text)] -- ^ Exceptions
   -> [Doc a]
 googleDocstring Nothing [] Nothing _ = []
-googleDocstring (Just (Docs docs)) [] Nothing _ = ["\"\"\"" WL.<> text (T.strip docs) WL.<> "\"\"\""]
+googleDocstring (Just (Docs d)) [] Nothing _ = ["\"\"\"" WL.<> text (T.strip d) WL.<> "\"\"\""]
 googleDocstring mDocs flds mRet excs =
   let
     -- Mangle the field names.
     mangle = mangleNames . S.fromList $ fmap (\(a, _, _) -> a) flds
 
     description = case mDocs of
-      Just (Docs docs) -> text . T.strip <$> T.lines docs
+      Just (Docs d) -> [WL.vsep (text . T.strip <$> T.lines d)]
       Nothing -> mempty
 
     arg (nm, ty, comment) = text (unName (M.findWithDefault nm nm mangle)) <> " (" <> genTypeV1 ty <> "): " <> text comment
@@ -132,6 +132,7 @@ googleDocstring mDocs flds mRet excs =
 discriminator :: Name -> [Doc a]
 discriminator (Name klass) =
   [
+    "",
     WL.vsep
       [ "ADT_TYPE" <> ":" <+> "typing.ClassVar" <> WL.brackets "str" <+> "=" <+> (WL.dquotes . text . T.toLower) klass
       , "adt_type" <> ":" <+> "str" <+> "=" <+> "dataclasses.field(init=False, repr=False, default=ADT_TYPE)"
@@ -143,12 +144,13 @@ discriminator (Name klass) =
 --
 -- Note that names are mangled according to Python lexical rules.
 fields :: [(Name, Type)] -> [Doc a]
+fields [] = []
 fields fs =
   let
     mangle = mangleNames . S.fromList . fmap fst $ fs
     field (nm, ty) = case M.findWithDefault nm nm mangle of
       Name n -> text n WL.<> WL.char ':' WL.<+> genTypeV1 ty
-  in fmap field fs
+  in "" : fmap field fs
 
 -- -----------------------------------------------------------------------------
 -- $ Enumerations
@@ -270,9 +272,7 @@ wrapperclass name@(Name n) super mDoc field =
       , string "class" <+> text n <> extends <> string ":"
       , WL.indent 4 . WL.vsep $ (
           googleDocstring mDoc [fieldDocstring field] Nothing [] <>
-          [mempty] <>
           discriminator name <>
-          [mempty] <>
           fields [field] <>
           serdeWrapper name field
         )
@@ -368,7 +368,6 @@ variantclass name@(Name n) mDoc ctors =
       , "class" <+> text n <> "(abc.ABC):"
       , WL.indent 4 . WL.vsep $ (
           googleDocstring mDoc (fmap fieldDocstring common) Nothing [] <>
-          [""] <>
           discriminator (Name "") <>
           fields common <>
           serdeVariant name
@@ -485,9 +484,7 @@ dataclass name@(Name n) super mDoc fieldDefs =
       , string "class" <+> text n <> extends <> string ":"
       , WL.indent 4 . WL.vsep $ (
           googleDocstring mDoc (fmap fieldDocstring fieldDefs) Nothing [] <>
-          [""] <>
           discriminator name <>
-          [""] <>
           fields fieldDefs <>
           serde name fieldDefs
         )
@@ -687,18 +684,11 @@ method name self args body =
 
 -- | Literal Python dictionary.
 dict :: [(Text, Doc a)] -> Doc a
-dict' [] = "{}"
-dict' fs =
-    "{" WL.<#> WL.indent 4 (WL.vsep (fmap field fs)) WL.<#> "}"
-  where
-    field (n, v) = WL.dquotes (text n) <> ":" WL.<+> v <> ","
-
-
-dict fields =
+dict fs =
      "{" WL.<##> WL.vsep fields' WL.<##> "}"
   where
     prettyKVPair (k,v) = flatIndent 4 $ WL.dquotes (text k) <> ":" <+> v
-    fields' = WL.punctuate "," $ fmap prettyKVPair fields
+    fields' = WL.punctuate "," $ fmap prettyKVPair fs
 
 
 flatIndent :: Int -> Doc a -> Doc a
