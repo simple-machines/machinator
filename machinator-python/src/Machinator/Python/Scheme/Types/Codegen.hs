@@ -219,8 +219,14 @@ generateJsonSchemaEnum (Name klass) ctors =
       []
     <> [
       "return " <> dict [
-        ("type", WL.dquotes "string"),
-        ("enum", list $ fmap (WL.dquotes . text . T.toLower . unName) ctors)
+        ("type", WL.dquotes "object"),
+        ("properties", dict [
+          ("adt_type", dict [
+            ("type", WL.dquotes "string"),
+            ("enum", list $ fmap (WL.dquotes . text . T.toLower . unName) ctors)
+          ])
+        ]),
+        ("required", list [WL.dquotes (text discriminatorProperty)])
       ]
     ]
   )
@@ -246,7 +252,7 @@ generateFromJsonEnum (Name klass) =
             "data",
             "cls.json_schema()"
           ],
-          text "return" WL.<+> text klass <> WL.parens ("str" <> WL.parens "data")
+          text "return" WL.<+> text klass <> WL.parens ("str" <> WL.parens "data['adt_type']")
         ],
         "except jsonschema.exceptions.ValidationError as ex:",
         WL.indent 4 . WL.vsep $ [
@@ -262,7 +268,7 @@ generateToJsonEnum :: Doc a
 generateToJsonEnum =
   method "to_json" "self" [] $ WL.vsep (
     googleDocstring (Just (Docs "Serialise this instance as JSON.")) [] (Just "JSON data ready to be serialised.") [] <> [
-    text "return self.value"
+    text "return {'adt_type': self.value}"
   ])
 
 
