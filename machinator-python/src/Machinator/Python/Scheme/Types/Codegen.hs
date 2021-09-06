@@ -25,6 +25,7 @@ import           Text.PrettyPrint.Annotated.WL (Doc, (<+>))
 import qualified Text.PrettyPrint.Annotated.WL as WL
 
 import           Machinator.Python.Mangle
+import Data.List (intersperse)
 
 
 -- | Name of the JSON property and field.
@@ -302,7 +303,8 @@ wrapperclass name@(Name n) super mDoc field =
 
 -- | Generates JSON de-/serialisation methods for a Python wrapper class.
 serdeWrapper :: Name -> (Name, Type) -> [Doc a]
-serdeWrapper n field@(_, ty) =
+serdeWrapper n field@(f, ty) =
+  -- generateMagicMethods f ty <>
   [ WL.mempty
   , generateJsonSchemaWrapper n ty
   , WL.mempty
@@ -310,6 +312,40 @@ serdeWrapper n field@(_, ty) =
   , WL.mempty
   , generateToJsonWrapper n field
   ]
+
+
+-- | Generate magic methods that delegate to the wrapped value.
+generateMagicMethods :: Name -> Type -> [Doc a]
+generateMagicMethods (Name n) ty =
+    WL.mempty : intersperse WL.mempty (strMethods <> intMethods <> floatMethods)
+  where
+    strMethods =
+      case ty of
+        GroundT _ ->
+          [ method "__str__" "self" [] $ WL.vsep (
+              googleDocstring (Just . Docs $ "Convert to a string.") [] Nothing [] <>
+              ["return" <+> "str" <> WL.parens ("self." <> text n)]
+            )
+          ]
+        _ -> []
+    floatMethods =
+      case ty of
+        GroundT t | t == DoubleT ->
+          [ method "__float__" "self" [] $ WL.vsep (
+              googleDocstring (Just . Docs $ "Convert to a float.") [] Nothing [] <>
+              ["return" <+> "float" <> WL.parens ("self." <> text n)]
+            )
+          ]
+        _ -> []
+    intMethods =
+      case ty of
+        GroundT t | t == IntT || t == LongT ->
+          [ method "__int__" "self" [] $ WL.vsep (
+              googleDocstring (Just . Docs $ "Convert to an int.") [] Nothing [] <>
+              ["return" <+> "int" <> WL.parens ("self." <> text n)]
+            )
+          ]
+        _ -> []
 
 
 -- | Generate the JSON schema method for a newtype wrapper.
