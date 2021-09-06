@@ -1,15 +1,17 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
 module Machinator.Python.Scheme.Types.Codegen
--- (
---     genTypesV1
---   , genTypeV1
---   )
+(
+    genTypesV1
+  , genTypeV1
+  , genImportsV1
+  )
 where
 
 
 import           Data.List.NonEmpty (NonEmpty (..))
 import qualified Data.Map.Strict as M
+import           Data.Set (Set)
 import qualified Data.Set as S
 import qualified Data.Text as T
 import qualified Data.Text.Lazy as TL
@@ -29,6 +31,13 @@ import           Machinator.Python.Mangle
 discriminatorProperty :: Text
 discriminatorProperty = "adt_type"
 
+genImportsV1 :: Name -> Set Name -> Text 
+genImportsV1 (Name n) ns =
+    renderText $
+      "from" <+> ".." <> text n <+> "import" <+> imports
+  where
+    names = WL.punctuate "," (fmap (text . unName) (S.toAscList ns))
+    imports = WL.group (WL.flatAlt ("(" WL.<##> WL.indent 4 (WL.fillSep names) WL.<##> ")") (WL.hsep names))
 
 -- | Generates a type declaration for the given definition.
 genTypesV1 :: Definition -> Text
@@ -582,7 +591,11 @@ generateFromJson (Name klass) fieldDefs =
         ],
         "except jsonschema.exceptions.ValidationError as ex:",
         WL.indent 4 . WL.vsep $ [
-          "logging.debug(\"Invalid JSON data received while parsing " <> text klass <> "\", exc_info=ex)",
+          WL.group (
+            "logging.debug(" WL.<##>
+              WL.indent 4 (WL.dquotes ("Invalid JSON data received while parsing " <> text klass) <> "," WL.<##> "exc_info=ex") WL.<##>
+            ")"
+          ),
           "raise"
         ]
       ]

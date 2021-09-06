@@ -7,7 +7,6 @@ import qualified Data.Char as Char
 import           Data.Map.Strict (Map)
 import qualified Data.Map.Strict as M
 import           Data.Set (Set)
-import qualified Data.Set as S
 import qualified Data.Text as T
 
 import           Machinator.Core
@@ -62,12 +61,7 @@ renderModule fp mn@(ModuleName n) imports defs =
   )
 
 renderImport :: (ModuleName, Set Name) -> Text
-renderImport (ModuleName n, ns) =
-  let
-    imports = (T.intercalate ", " . fmap unName . S.toAscList) ns
-  in
-    "from .." <> n <> " import " <> imports
-
+renderImport (ModuleName n, ns) = Codegen.genImportsV1 (Name n) ns
 
 -- -----------------------------------------------------------------------------
 
