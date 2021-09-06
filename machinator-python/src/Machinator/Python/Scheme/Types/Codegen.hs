@@ -417,11 +417,12 @@ generateJsonSchemaVariant (Name klass) =
       "return " <> dict [
         ("type", WL.dquotes "object"),
         ("properties", dict [
-          ("adt_type", dict [
+          (discriminatorProperty, dict [
             ("type", WL.dquotes "string"),
             ("enum", "adt_types")
           ])
-        ])
+        ]),
+        ("required", list [WL.dquotes (text discriminatorProperty)])
       ]
     ]
   )
@@ -454,7 +455,8 @@ generateFromJsonVariant (Name klass) =
                 WL.indent 4 (
                   "return" <+> "klass.from_json(data)"
                 )
-            )
+            ),
+          "raise "
         ],
         "except jsonschema.exceptions.ValidationError as ex:",
         WL.indent 4 . WL.vsep $ [
@@ -613,7 +615,7 @@ schemaType ty =
       BoolT -> dict [("type", WL.dquotes "boolean")]
       IntT -> dict [("type", WL.dquotes "integer")]
       LongT -> dict [("type", WL.dquotes "integer")]
-      DoubleT -> dict [("type", WL.dquotes "float")]
+      DoubleT -> dict [("type", WL.dquotes "number")]
       UUIDT -> dict [("type", WL.dquotes "string"), ("format", WL.dquotes "uuid")]
       DateT -> dict [("type", WL.dquotes "string"), ("format", WL.dquotes "date")]
       DateTimeT -> dict [("type", WL.dquotes "string"), ("format", WL.dquotes "date-time")]
@@ -639,7 +641,7 @@ serialiseType value ty = case ty of
     DoubleT -> value
     UUIDT -> "str" <> WL.parens value
     DateT -> value <> ".isoformat()"
-    DateTimeT -> value <> ".strfmt('%Y-%m-%dT%H:%M:%S.%f%z')" -- TODO: We should force timezones?
+    DateTimeT -> value <> ".strftime('%Y-%m-%dT%H:%M:%S.%f%z')" -- TODO: We should force timezones?
   ListT ty' -> "[" <> serialiseType "v" ty' <> " for v in " <> value <> "]"
   MaybeT ty' -> "(" <> "lambda v: v and " <> serialiseType "v" ty' <> ")(" <> value <> ")"
 
