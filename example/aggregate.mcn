@@ -1,5 +1,13 @@
 -- machinator @ v2
+{-- A file -}
 
+{- | Another example. -}
+data Size
+  = Large
+  | Medium
+  | Small
+
+{- | Aggregations to apply to query results. -}
 data AggregateExpression
-  = Sum {}
-  | Average {}
+  = Sum
+  | Average

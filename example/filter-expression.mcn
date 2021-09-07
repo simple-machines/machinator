@@ -1,3 +1,36 @@
 -- machinator @ v2
 
+{- | SQL expression to use when filtering input records. -}
 record FilterExpression = { sql: String }
+
+
+{- | SQL expression to use when selecting input records. -}
+record SelectExpression = { sql: String }
+
+{- | SQL expression to use when selecting input records. -}
+record AggregateExpression = { sql: String }
+
+{- | SQL expression to use when selecting input records. -}
+record PostAggregateExpression = { sql: String }
+
+{- | This is an example.
+
+     In Python, we just treat newtypes as synonyms.
+-}
+newtype Example = { foo: int }
+
+
+{- | Variant type. -}
+data Foo
+  = {- | The last, best chance for peace. -}
+     V1 {
+          name: String
+     }
+  |  {- | This has all happened before. -}
+     V2 {
+          names: List String,
+          age: Int,
+          height: Maybe Double,
+          parent: Maybe Foo,
+          bar: Size
+     }

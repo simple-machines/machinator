@@ -1,6 +1,8 @@
 TAGS
-dist
-cabal-dev
+dist/
+dist-newstyle/
+cabal-dev/
+/venv*/
 *.o
 *.hi
 *.chi

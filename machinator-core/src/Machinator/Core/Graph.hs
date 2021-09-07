@@ -37,8 +37,20 @@ buildFileGraph fs =
     inverted =
       M.foldMapWithKey (\k ns -> foldl' (\acc v -> M.insertWith (<>) v k acc) mempty ns) binds
 
-    fg :: Map FilePath (Set FilePath)
+    fg :: Map FilePath (Map FilePath (Set Name))
     fg =
       M.fromList . with fs $ \(DefinitionFile fp _) ->
-        (fp,) (maybe mempty (S.fromList . filter (/= fp) . catMaybes . fmap (flip M.lookup inverted)) (M.lookup fp uses))
+        let
+          u :: Maybe [Name]
+          u = M.lookup fp uses
+
+          d :: [(FilePath, Set Name)]
+          d = catMaybes (maybe mempty (fmap (\n -> fmap (, S.singleton n) (M.lookup n inverted))) u)
+
+          i :: [Map FilePath (Set Name)]
+          i = fmap (uncurry M.singleton) (filter ((/= fp) . fst) d)
+
+          deps :: Map FilePath (Set Name)
+          deps = foldr (M.unionWith (<>)) mempty i
+        in (fp, deps)
   in DefinitionFileGraph fg

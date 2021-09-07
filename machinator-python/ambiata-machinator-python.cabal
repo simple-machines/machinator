@@ -1,14 +1,14 @@
-name:                  ambiata-machinator-scala
+name:                  ambiata-machinator-python
 version:               1.0.0
 license:               BSD3
 author:                Ambiata <info@ambiata.com>
 maintainer:            Ambiata <info@ambiata.com>
 copyright:             (c) 2017 Ambiata.
-synopsis:              ambiata-machinator-scala
+synopsis:              ambiata-machinator-python
 category:              System
 cabal-version:         >= 1.8
 build-type:            Simple
-description:           ambiata-machinator-scala
+description:           ambiata-machinator-python
 
 library
   build-depends:
@@ -30,14 +30,14 @@ library
                        src
 
   exposed-modules:
-                       Machinator.Scala
-                       Machinator.Scala.Data.Types
-                       Machinator.Scala.Scheme.Types
-                       Machinator.Scala.Scheme.Circe.Codegen
-                       Machinator.Scala.Scheme.Types.Codegen
+                       Machinator.Python
+                       Machinator.Python.Data.Types
+                       Machinator.Python.Mangle
+                       Machinator.Python.Scheme.Types
+                       Machinator.Python.Scheme.Types.Codegen
 
 
-executable gen-scala
+executable gen-python
   hs-source-dirs:      main
   main-is:             Main.hs
   ghc-options:         -Wall -threaded -O2
@@ -45,12 +45,12 @@ executable gen-scala
   build-depends:
                        base                            >= 3          && < 5
                      , ambiata-machinator-core
-                     , ambiata-machinator-scala
+                     , ambiata-machinator-python
                      , ambiata-p
                      , ambiata-x-eithert
                      , ambiata-x-optparse
-                     , optparse-applicative            >= 0.10       && < 1.0
                      , filepath                        == 1.4.*
+                     , optparse-applicative            >= 0.10       && < 1.0
                      , text                            == 1.2.*
                      , transformers                    >= 0.4        && < 0.7
                      , directory                       == 1.3.*

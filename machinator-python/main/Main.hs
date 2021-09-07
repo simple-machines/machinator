@@ -20,7 +20,7 @@ import           X.Control.Monad.Trans.Either (EitherT, hoistEither)
 import           X.Control.Monad.Trans.Either.Exit (orDie)
 
 import           Machinator.Core as Machinator
-import           Machinator.Scala as Machinator
+import           Machinator.Python as Machinator
 
 data Options
   = Options
@@ -43,16 +43,16 @@ main = do
   results     <- orDie (T.pack . show) $ hoistEither $ typesV1 definitions
 
   for_ results $ \(fp, contents) -> do
-    let dest = out </> fp
+    let dest = dropExtension (out </> fp) </> "__init__.py"
     createDirectoryIfMissing True (takeDirectory dest)
     T.writeFile dest contents
-    IO.putStrLn ("Created " <> dest )
+    IO.putStrLn ("Created " <> dest)
 
   where
     opts = info (options <**> helper)
       ( fullDesc
-     <> progDesc "Print a greeting for TARGET"
-     <> header "hello - a test for optparse-applicative" )
+     <> progDesc "Generate a Python client library from machinator source"
+     <> header "gen-python - generate Python client implementation" )
 
 parseData :: [FilePath] -> EitherT Machinator.MachinatorError IO [Machinator.DefinitionFile]
 parseData dfiles = do

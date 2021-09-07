@@ -1,0 +1,31 @@
+-- machinator @ v2
+
+{- | Unique identifier for examples. -}
+newtype ExampleId = { id: Int }
+
+{- | Numbers. -}
+data Alt = One | Two | Three | LotsAndLots
+
+{- | Funny numbers. -}
+newtype BadAlt = { what: Alt }
+
+{- | Hello. -}
+newtype Ver = { this: UUID }
+
+{- | Check keyword handling in destination languages. -}
+data Foo
+    = {- | An example of Python keywords. -}
+      Python {
+        id: ExampleId,
+        from: Int,
+        to: Int,
+        class: String,
+        ver: Maybe Ver
+      }
+    | {- | An example of Haskell keywords. -}
+      Haskell {
+        type: String,
+        class: Bool,
+        wot: BadAlt,
+        yes: Maybe (List Ver)
+      }
