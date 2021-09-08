@@ -25,7 +25,6 @@ import           Text.PrettyPrint.Annotated.WL (Doc, (<+>))
 import qualified Text.PrettyPrint.Annotated.WL as WL
 
 import           Machinator.Python.Mangle
-import Data.List (intersperse)
 
 
 -- | Name of the JSON property and field.
@@ -186,15 +185,17 @@ isEnum cs = go cs
 -- | Generates a Python enumeration.
 enum :: Name -> Maybe Docs -> [Name] -> Doc a
 enum n@(Name klass) mDoc ctors =
-  WL.linebreak WL.<#>
-  WL.vsep [
-      string "class" WL.<+> text klass WL.<> WL.parens (string "enum.Enum") WL.<> ":",
-      WL.indent 4 . WL.vsep $ (
-        googleDocstring mDoc [] Nothing [] <>
-        fmap (\(Name m) -> WL.hsep [text m, WL.char '=', WL.dquotes $ text (T.toLower m)]) ctors <>
-        serdeEnum n ctors
-      )
-  ]
+    WL.linebreak WL.<#>
+    WL.vsep [
+        string "class" WL.<+> text klass WL.<> WL.parens (string "enum.Enum") WL.<> ":",
+        WL.indent 4 . WL.vsep $ (
+          googleDocstring mDoc [] Nothing [] <>
+          fmap (\(Name m) -> WL.hsep [text m, WL.char '=', WL.dquotes $ (text . T.toLower . value) m]) ctors <>
+          serdeEnum n ctors
+        )
+    ]
+  where
+    value v = T.toLower $ if klass `T.isSuffixOf` v then T.dropEnd (T.length klass) v else v
 
 
 -- | Generate the JSON de-/serialisation methods for an enumeration.
@@ -296,6 +297,7 @@ wrapperclass name@(Name n) super mDoc field =
           googleDocstring mDoc [fieldDocstring field] Nothing [] <>
           discriminator name super <>
           fields [field] <>
+          generateMagicMethods field <>
           serdeWrapper name field
         )
       ]
@@ -303,8 +305,7 @@ wrapperclass name@(Name n) super mDoc field =
 
 -- | Generates JSON de-/serialisation methods for a Python wrapper class.
 serdeWrapper :: Name -> (Name, Type) -> [Doc a]
-serdeWrapper n field@(f, ty) =
-  -- generateMagicMethods f ty <>
+serdeWrapper n field@(_, ty) =
   [ WL.mempty
   , generateJsonSchemaWrapper n ty
   , WL.mempty
@@ -315,38 +316,41 @@ serdeWrapper n field@(f, ty) =
 
 
 -- | Generate magic methods that delegate to the wrapped value.
-generateMagicMethods :: Name -> Type -> [Doc a]
-generateMagicMethods (Name n) ty =
-    WL.mempty : intersperse WL.mempty (strMethods <> intMethods <> floatMethods)
+generateMagicMethods :: (Name, Type) -> [Doc a]
+generateMagicMethods (Name n, ty) =
+    case ty of
+      GroundT IntT    -> strMethod <> intMethod
+      GroundT LongT   -> strMethod <> intMethod
+      GroundT DoubleT -> strMethod <> floatMethod
+      GroundT StringT -> strMethod
+      GroundT UUIDT   -> strMethod
+      ListT _         -> iterMethod
+      _               -> []
   where
-    strMethods =
-      case ty of
-        GroundT _ ->
-          [ method "__str__" "self" [] $ WL.vsep (
-              googleDocstring (Just . Docs $ "Convert to a string.") [] Nothing [] <>
-              ["return" <+> "str" <> WL.parens ("self." <> text n)]
-            )
-          ]
-        _ -> []
-    floatMethods =
-      case ty of
-        GroundT t | t == DoubleT ->
-          [ method "__float__" "self" [] $ WL.vsep (
-              googleDocstring (Just . Docs $ "Convert to a float.") [] Nothing [] <>
-              ["return" <+> "float" <> WL.parens ("self." <> text n)]
-            )
-          ]
-        _ -> []
-    intMethods =
-      case ty of
-        GroundT t | t == IntT || t == LongT ->
-          [ method "__int__" "self" [] $ WL.vsep (
-              googleDocstring (Just . Docs $ "Convert to an int.") [] Nothing [] <>
-              ["return" <+> "int" <> WL.parens ("self." <> text n)]
-            )
-          ]
-        _ -> []
-
+    strMethod = WL.mempty : [
+        method "__str__" "self" [] $ WL.vsep (
+          googleDocstring (Just . Docs $ "Return a str of the wrapped value.") [] Nothing [] <>
+          ["return" <+> "str" <> WL.parens ("self." <> text n)]
+        )
+      ]
+    floatMethod = WL.mempty : [
+        method "__float__" "self" [] $ WL.vsep (
+          googleDocstring (Just . Docs $ "Return a float of the wrapped value.") [] Nothing [] <>
+          ["return" <+> "float" <> WL.parens ("self." <> text n)]
+        )
+      ]
+    intMethod = WL.mempty : [
+        method "__int__" "self" [] $ WL.vsep (
+          googleDocstring (Just . Docs $ "Return an int of the wrapped value.") [] Nothing [] <>
+          ["return" <+> "int" <> WL.parens ("self." <> text n)]
+        )
+      ]
+    iterMethod = WL.mempty : [
+        method "__iter__" "self" [] $ WL.vsep (
+          googleDocstring (Just . Docs $ "Return an iterator of the wrapper list.") [] Nothing [] <>
+          ["return" <+> "iter" <> WL.parens ("self." <> text n)]
+        )
+      ]
 
 -- | Generate the JSON schema method for a newtype wrapper.
 generateJsonSchemaWrapper :: Name -> Type -> Doc a
