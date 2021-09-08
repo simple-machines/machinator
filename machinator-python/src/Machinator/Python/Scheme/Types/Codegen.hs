@@ -25,7 +25,6 @@ import           Text.PrettyPrint.Annotated.WL (Doc, (<+>))
 import qualified Text.PrettyPrint.Annotated.WL as WL
 
 import           Machinator.Python.Mangle
-import Data.List (intersperse)
 
 
 -- | Name of the JSON property and field.
@@ -186,15 +185,17 @@ isEnum cs = go cs
 -- | Generates a Python enumeration.
 enum :: Name -> Maybe Docs -> [Name] -> Doc a
 enum n@(Name klass) mDoc ctors =
-  WL.linebreak WL.<#>
-  WL.vsep [
-      string "class" WL.<+> text klass WL.<> WL.parens (string "enum.Enum") WL.<> ":",
-      WL.indent 4 . WL.vsep $ (
-        googleDocstring mDoc [] Nothing [] <>
-        fmap (\(Name m) -> WL.hsep [text m, WL.char '=', WL.dquotes $ text (T.toLower m)]) ctors <>
-        serdeEnum n ctors
-      )
-  ]
+    WL.linebreak WL.<#>
+    WL.vsep [
+        string "class" WL.<+> text klass WL.<> WL.parens (string "enum.Enum") WL.<> ":",
+        WL.indent 4 . WL.vsep $ (
+          googleDocstring mDoc [] Nothing [] <>
+          fmap (\(Name m) -> WL.hsep [text m, WL.char '=', WL.dquotes $ (text . T.toLower . value) m]) ctors <>
+          serdeEnum n ctors
+        )
+    ]
+  where
+    value v = T.toLower $ if klass `T.isSuffixOf` v then T.dropEnd (T.length klass) v else v
 
 
 -- | Generate the JSON de-/serialisation methods for an enumeration.
