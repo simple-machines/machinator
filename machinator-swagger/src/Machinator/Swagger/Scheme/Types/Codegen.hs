@@ -80,16 +80,19 @@ genNewtype nDoc wrappedType =
         GroundT g ->
           genGroundSchema g
             & description .~ (docText <$> nDoc)
-        ListT t2 -> do
+        ListT t2 ->
           mempty
             & type_ ?~ OpenApiArray
             & items ?~ OpenApiItemsObject (genTypeV1 t2)
             & description .~ (docText <$> nDoc)
-
         MaybeT t2 ->
           genNewtype nDoc t2
             & nullable ?~ True
-
+        -- TODO: This just blindly assumes that the keys are serialised as JSON strings.
+        MapT _ v ->
+          mempty
+            & type_ ?~ OpenApiObject
+            & additionalProperties ?~ AdditionalPropertiesSchema (genTypeV1 v)
   in
     openWrappedType
 
@@ -117,6 +120,12 @@ genTypeV1 ty =
     MaybeT t2 ->
       genTypeV1 t2
 
+    -- TODO: This just blindly assumes that the keys are serialised as JSON strings.
+    MapT _ v ->
+      Inline
+        $ mempty
+        & type_ ?~ OpenApiObject
+        & additionalProperties ?~ AdditionalPropertiesSchema (genTypeV1 v)
 
 genGroundSchema :: Ground -> Schema
 genGroundSchema g =

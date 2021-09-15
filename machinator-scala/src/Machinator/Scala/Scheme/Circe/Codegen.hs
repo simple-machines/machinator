@@ -28,6 +28,8 @@ generateCirceV1 defs =
   concat . with defs $ \def -> [
       generateToJsonV1 def
     , generateFromJsonV1 def
+    , generateToJsonKeyV1 def
+    , generateFromJsonKeyV1 def
     ]
 
 
@@ -38,14 +40,21 @@ generateToJsonV1Companion def@(M.Definition (M.Name tn) _ _) =
       code_block [
           generateToJsonV1 def
         , generateFromJsonV1 def
+        , generateToJsonKeyV1 def
+        , generateFromJsonKeyV1 def
         ]
 
+typeNameV1 :: M.Definition -> Doc a
+typeNameV1 (M.Definition (M.Name tn) _ (M.Variant _)) = text tn
+typeNameV1 (M.Definition (M.Name tn) _ (M.Record [])) = text tn <> ".type"
+typeNameV1 (M.Definition (M.Name tn) _ (M.Record _)) = text tn
+typeNameV1 (M.Definition (M.Name tn) _ (M.Newtype _)) = text tn
 
 generateToJsonV1 :: M.Definition -> Doc a
-generateToJsonV1 (M.Definition (M.Name tn) _ typ) =
+generateToJsonV1 def@(M.Definition (M.Name tn) _ typ) =
   text "implicit val"
     <+> text tn <> text "Encoder" <> text ":"
-    <+> text "io.circe.Encoder" <> WL.brackets (text tn)
+    <+> text "io.circe.Encoder" <> WL.brackets (typeNameV1 def)
     <+> text "="
     <+> code_block
       [ case typ of
@@ -67,6 +76,13 @@ generateToJsonV1 (M.Definition (M.Name tn) _ typ) =
                           field "adt_type" (text "io.circe.Json.fromString" <> WL.parens (WL.dquotes (makeDiscriminator tn n))) :
                           with fts (\(M.Name fn, f'typ) -> field fn (text "io.circe.Encoder" <> WL.brackets (genTypeV1 f'typ) <> text ".apply" <> WL.parens (text fn)))
                       )
+          M.Record [] ->
+              case_expr
+                  (text tn)
+                  ( object
+                      [ field "adt_type" (text "io.circe.Json.fromString" <> WL.parens (WL.dquotes (makeDiscriminator "" tn)))
+                      ]
+                  )
           M.Record fts ->
             case_expr
               (text tn <> WL.tupled (with fts $ \(M.Name n, _) -> text n))
@@ -79,15 +95,14 @@ generateToJsonV1 (M.Definition (M.Name tn) _ typ) =
               (text "io.circe.Encoder" <> WL.brackets (genTypeV1 wrappedType) <> text ".apply" <> WL.parens (text wrapper))
       ]
 
-
 generateFromJsonV1 :: M.Definition -> Doc a
-generateFromJsonV1 (M.Definition (M.Name tn) _ typ) =
+generateFromJsonV1 def@(M.Definition (M.Name tn) _ typ) =
   text "implicit val"
     <+> text tn
     <> text "Decoder"
     <> text ":"
     <+> text "io.circe.Decoder"
-    <> WL.brackets (text tn)
+    <> WL.brackets (typeNameV1 def)
     <+> text "="
     <> WL.hardline
     <> WL.indent 2
@@ -118,6 +133,8 @@ generateFromJsonV1 (M.Definition (M.Name tn) _ typ) =
                                  (text "Left(io.circe.DecodingFailure(s\"Unknown ADT constructor $unknown.\", c.history))")
                              ]
                       )
+                M.Record [] ->
+                  text "Right" <> WL.parens (text tn)
                 M.Record fts ->
                   for_yield
                     ( with fts $ \(M.Name f, ft) ->
@@ -130,6 +147,39 @@ generateFromJsonV1 (M.Definition (M.Name tn) _ typ) =
                     (text tn <> WL.tupled [text wrapper])
             )
       )
+
+
+-- | Generate a Circe KeyEncoder (for newtyped ground types only).
+generateToJsonKeyV1 :: M.Definition -> Doc a
+generateToJsonKeyV1 def@(M.Definition (M.Name tn) _ (M.Newtype (M.Name wrapper, wrappedType@(M.GroundT _)))) =
+  text "implicit val"
+    <+> text tn <> text "KeyEncoder" <> text ":"
+    <+> text "io.circe.KeyEncoder" <> WL.brackets (typeNameV1 def)
+    <+> text "="
+    <+> code_block
+      [ case_expr
+          (text tn <> WL.tupled [text wrapper])
+          (text "io.circe.KeyEncoder" <> WL.brackets (genTypeV1 wrappedType) <> text ".apply" <> WL.parens (text wrapper))
+      ]
+generateToJsonKeyV1 _ = WL.mempty
+
+-- | Generate a Circe KeyDecoder (for newtyped ground types only).
+generateFromJsonKeyV1 :: M.Definition -> Doc a
+generateFromJsonKeyV1 def@(M.Definition (M.Name tn) _ (M.Newtype (_, M.GroundT ty))) =
+    fromMaybe WL.mempty $ with (parse ty) $ \parser ->
+      text "implicit val"
+        <+> text tn <> text "KeyDecoder" <> text ":"
+        <+> text "io.circe.KeyDecoder" <> WL.brackets (typeNameV1 def)
+        <+> text "="
+        <+> code_block
+          [ WL.parens "key: String" <+> "=>" <+> "scala.util.Try" <> WL.parens (text tn <> ".apply" <> WL.parens parser) <> ".toOption"
+          ]
+  where
+    parse M.IntT = Just "key.toInt"
+    parse M.BoolT = Just "key.toBoolean"
+    parse M.UUIDT = Just "java.util.UUID.fromString(key)"
+    parse _ = Nothing
+generateFromJsonKeyV1 _ = WL.mempty
 
 -- -----------------------------------------------------------------------------
 

@@ -49,7 +49,7 @@ genTypesV1' :: Definition -> Doc a
 genTypesV1' (Definition name mDoc dec) =
   case dec of
     Variant (c1 :| cts)
-      | isEnum (c1:cts) -> enum name mDoc (fmap (\(n, _, _) -> n) $ c1:cts)
+      | isEnum (c1:cts) -> enum name mDoc (fmap (\(n, d, _) -> (n, d)) $ c1:cts)
       | otherwise       -> WL.vsep $
                                variantclass name mDoc (c1:cts)
                              : fmap (\(m, md, fs) -> dataclass m (Just name) md fs) (c1:cts)
@@ -88,6 +88,8 @@ genTypeV1 ty =
       text "typing.List" WL.<> WL.brackets (genTypeV1 t2)
     MaybeT t2 ->
       string "typing.Optional" <> WL.brackets (genTypeV1 t2)
+    MapT k v ->
+      text "typing.Dict" <> (WL.brackets . WL.hcat) (WL.punctuate "," [genTypeV1 k, genTypeV1 v])
 
 -- -----------------------------------------------------------------------------
 
@@ -183,18 +185,23 @@ isEnum cs = go cs
 
 
 -- | Generates a Python enumeration.
-enum :: Name -> Maybe Docs -> [Name] -> Doc a
+enum :: Name -> Maybe Docs -> [(Name, Maybe Docs)] -> Doc a
 enum n@(Name klass) mDoc ctors =
     WL.linebreak WL.<#>
     WL.vsep [
         string "class" WL.<+> text klass WL.<> WL.parens (string "enum.Enum") WL.<> ":",
         WL.indent 4 . WL.vsep $ (
           googleDocstring mDoc [] Nothing [] <>
-          fmap (\(Name m) -> WL.hsep [text m, WL.char '=', WL.dquotes $ (text . T.toLower . value) m]) ctors <>
-          serdeEnum n ctors
+          fmap def ctors <>
+          serdeEnum n (fmap fst ctors)
         )
     ]
   where
+    def (Name m, doc) =
+      let d = WL.hsep [text m, WL.char '=', WL.dquotes $ (text . T.toLower . value) m]
+      in case doc of
+        Nothing -> d
+        docs -> WL.vsep (d : googleDocstring docs [] Nothing [])
     value v = T.toLower $ if klass `T.isSuffixOf` v then T.dropEnd (T.length klass) v else v
 
 
@@ -681,6 +688,10 @@ schemaType ty =
         WL.group (dict [("type", WL.dquotes "null")]),
         WL.group (schemaType ty')
       ])]
+    MapT _ v -> dict [
+        ("type", WL.dquotes "object"),
+        ("additionalProperties", schemaType v)
+      ]
 
 
 -- | Generate the Python expression to serialise a type to JSON.
@@ -698,7 +709,8 @@ serialiseType value ty = case ty of
     DateTimeT -> value <> ".strftime('%Y-%m-%dT%H:%M:%S.%f%z')" -- TODO: We should force timezones?
   ListT ty' -> "[" <> serialiseType "v" ty' <> " for v in " <> value <> "]"
   MaybeT ty' -> "(" <> "lambda v: v and " <> serialiseType "v" ty' <> ")(" <> value <> ")"
-
+  -- TODO: This just blindly assumes that k will be serialised to a str and not any other JSON document.
+  MapT k v -> "{" <> serialiseType "k" k <> ":" <+> serialiseType "v" v <+> "for" <+> "k, v" <+> "in" <+> value <> "}"
 
 -- | Generate the Python expression to parse a type from JSON.
 parseType :: Doc a -> Type -> Doc a
@@ -721,6 +733,12 @@ parseType value ty = case ty of
       ")(" WL.<##>
         flatIndent 4 value WL.<##>
       ")"
+    )
+  MapT k v ->
+    WL.group (
+      "{" WL.<##>
+        flatIndent 4 (parseType "k" k <> ":" <+> parseType "v" v <+> "for" <+> "k, v" <+> "in" <+> value) WL.<##>
+      "}"
     )
 
 -- -----------------------------------------------------------------------------

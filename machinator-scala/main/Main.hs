@@ -12,7 +12,7 @@ import           Options.Applicative
 import           P
 
 import           System.Directory (createDirectoryIfMissing)
-import           System.FilePath ((</>), takeDirectory, dropExtension)
+import           System.FilePath ((</>), takeDirectory)
 import           System.IO (IO, FilePath)
 import qualified System.IO as IO
 
@@ -25,6 +25,7 @@ import           Machinator.Scala as Machinator
 data Options
   = Options
     { targetDirectory :: FilePath  -- ^ Directory to write output files.
+    , package :: Text              -- ^ Scala package name.
     , sourceFiles :: [FilePath]    -- ^ Input files.
     }
 
@@ -34,13 +35,14 @@ inputs = many (strArgument (metavar "machinator"))
 options :: Parser Options
 options = Options
   <$> strOption (long "target" <> metavar "DIR")
+  <*> strOption (long "package" <> metavar "PKG")
   <*> inputs
 
 main :: IO ()
 main = do
-  (Options out files) <- execParser opts
+  (Options out pkg files) <- execParser opts
   definitions <- orDie (T.pack . show) $ parseData files
-  results     <- orDie (T.pack . show) $ hoistEither $ typesV1 definitions
+  results     <- orDie (T.pack . show) $ hoistEither $ typesV1 pkg definitions
 
   for_ results $ \(fp, contents) -> do
     let dest = out </> fp

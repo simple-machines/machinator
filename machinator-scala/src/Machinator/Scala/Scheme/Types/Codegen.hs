@@ -2,12 +2,14 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Machinator.Scala.Scheme.Types.Codegen (
     genTypesV1
-
   , genTypeV1
+  , genImportsV1
   ) where
 
 
 import           Data.List.NonEmpty (NonEmpty (..))
+import           Data.Set (Set)
+import qualified Data.Set as S
 import qualified Data.Text as T
 import qualified Data.Text.Lazy as TL
 
@@ -19,6 +21,15 @@ import           P
 import           Text.PrettyPrint.Annotated.WL (Doc, (<+>))
 import qualified Text.PrettyPrint.Annotated.WL as WL
 
+
+-- | Generates import statements.
+genImportsV1 :: Name -> Set Name -> Text
+genImportsV1 (Name n) ns =
+    renderText $ "import" <+> text n <> "." <> imports
+  where
+    names = WL.punctuate "," (fmap (text . unName) (S.toAscList ns))
+    imports | S.size ns == 1 = WL.hsep names
+            | otherwise = WL.group (WL.flatAlt ("{" WL.<##> WL.indent 4 (WL.fillSep names) WL.<##> "}") (WL.braces (WL.hsep names)))
 
 -- | Generates a type declaration for the given definition.
 genTypesV1 :: Definition -> Text
@@ -35,11 +46,11 @@ genTypesV1 def@(Definition _ mDoc _) =
 
 -- | Generates a type declaration for the given definition.
 genTypesV1' :: Definition -> Doc a
-genTypesV1' (Definition name@(Name n) _ dec) =
+genTypesV1' (Definition name _ dec) =
   case dec of
     Variant (c1 :| cts) ->
       WL.vsep $
-          string "sealed trait" <+> text n
+          genVariantV1 name Nothing (variantProperties (c1:cts))
         : fmap (uncurry3 (genConstructorV1 name)) (c1:cts)
 
     Record fts ->
@@ -75,7 +86,31 @@ genTypeV1 ty =
       string "List" <> WL.brackets (genTypeV1 t2)
     MaybeT t2 ->
       string "Option" <> WL.brackets (genTypeV1 t2)
+    MapT k v ->
+      string "Map" <> WL.brackets (genTypeV1 k <> "," <+> genTypeV1 v)
 
+-- | Find the set of common properties in the constructors of a variant.
+variantProperties :: [(Name, Maybe Docs, [(Name, Type)])] -> [(Name, Type)]
+variantProperties ctors =
+  let fs = fmap (\(_, _, f) -> S.fromList f) ctors
+  in S.toAscList (foldr S.intersection (S.unions fs) fs)
+
+-- | Generate the sealed trait for a variant type.
+genVariantV1 :: Name -> Maybe Docs -> [(Name, Type)] -> Doc a
+genVariantV1 (Name n) mDoc fs =
+  let
+    field (Name f, ty) = "val" <+> text f <> ":" <+> genTypeV1 ty
+    hd = "sealed trait" <+> text n
+    built = case fs of
+      [] -> hd
+      fs -> hd <+> "{" WL.<##> WL.indent 4 (WL.vsep (fmap field fs)) WL.<##> "}"
+  in case mDoc of
+    Just (Docs docs) ->
+      WL.vsep [ simpleComment docs, built ]
+    Nothing ->
+      built
+
+-- | Generate the case class for a variant type data constructor.
 genConstructorV1 :: Name -> Name -> Maybe Docs -> [(Name, Type)] -> Doc a
 genConstructorV1 (Name extends) constructorName mDoc tys =
   let
