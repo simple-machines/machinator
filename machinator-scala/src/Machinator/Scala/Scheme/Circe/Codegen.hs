@@ -46,7 +46,6 @@ generateToJsonV1Companion def@(M.Definition (M.Name tn) _ _) =
 
 typeNameV1 :: M.Definition -> Doc a
 typeNameV1 (M.Definition (M.Name tn) _ (M.Variant _)) = text tn
-typeNameV1 (M.Definition (M.Name tn) _ (M.Record [])) = text tn <> ".type"
 typeNameV1 (M.Definition (M.Name tn) _ (M.Record _)) = text tn
 typeNameV1 (M.Definition (M.Name tn) _ (M.Newtype _)) = text tn
 
@@ -76,13 +75,6 @@ generateToJsonV1 def@(M.Definition (M.Name tn) _ typ) =
                           field "adt_type" (text "io.circe.Json.fromString" <> WL.parens (WL.dquotes (makeDiscriminator tn n))) :
                           with fts (\(M.Name fn, f'typ) -> field fn (text "io.circe.Encoder" <> WL.brackets (genTypeV1 f'typ) <> text ".apply" <> WL.parens (text fn)))
                       )
-          M.Record [] ->
-              case_expr
-                  (text tn)
-                  ( object
-                      [ field "adt_type" (text "io.circe.Json.fromString" <> WL.parens (WL.dquotes (makeDiscriminator "" tn)))
-                      ]
-                  )
           M.Record fts ->
             case_expr
               (text tn <> WL.tupled (with fts $ \(M.Name n, _) -> text n))
@@ -134,7 +126,7 @@ generateFromJsonV1 def@(M.Definition (M.Name tn) _ typ) =
                              ]
                       )
                 M.Record [] ->
-                  text "Right" <> WL.parens (text tn)
+                  text "Right" <> WL.parens (text tn <> WL.tupled [])
                 M.Record fts ->
                   for_yield
                     ( with fts $ \(M.Name f, ft) ->

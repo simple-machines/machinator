@@ -54,10 +54,10 @@ genTypesV1' (Definition name _ dec) =
         : fmap (uncurry3 (genConstructorV1 name)) (c1:cts)
 
     Record fts ->
-      genRecordV1 name fts
+      genRecordV1 False name fts
 
     Newtype ft ->
-      genRecordV1 name [ft] <+> text "extends" <+> text "AnyVal"
+      genRecordV1 False name [ft] <+> text "extends" <+> text "AnyVal"
 
 genTypeV1 :: Type -> Doc a
 genTypeV1 ty =
@@ -114,7 +114,7 @@ genVariantV1 (Name n) mDoc fs =
 genConstructorV1 :: Name -> Name -> Maybe Docs -> [(Name, Type)] -> Doc a
 genConstructorV1 (Name extends) constructorName mDoc tys =
   let
-    built = genRecordV1 constructorName tys <+> text "extends" <+> text extends
+    built = genRecordV1 True constructorName tys <+> text "extends" <+> text extends
   in case mDoc of
     Just (Docs docs) ->
       WL.vsep [ simpleComment docs, built ]
@@ -127,12 +127,16 @@ genConstructorV1 (Name extends) constructorName mDoc tys =
 -- [(Name "foo", GroundT StringT), (Name "bar", GroundT StringT)]
 -- { foo :: String, bar :: String }
 -- @
-genRecordV1 :: Name -> [(Name, Type)] -> Doc a
-genRecordV1 (Name n) [] =
-  WL.hang 2 $
-    text "case object" <+> text n
+genRecordV1 :: Bool -> Name -> [(Name, Type)] -> Doc a
+genRecordV1 isConstructor (Name n) []
+  | isConstructor
+  = WL.hang 2 $
+      text "case object" <+> text n
+  | otherwise
+  = WL.hang 2 $
+      text "case class" <+> text n <> WL.tupled []
 
-genRecordV1 (Name n) fts =
+genRecordV1 _ (Name n) fts =
   WL.hang 2 $
     text "case class" <+> text n <> WL.tupled (
       with fts $ \(Name fn, ty) ->
