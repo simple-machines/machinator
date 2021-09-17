@@ -89,7 +89,7 @@ genTypeV1 ty =
     MaybeT t2 ->
       string "typing.Optional" <> WL.brackets (genTypeV1 t2)
     MapT k v ->
-      text "typing.Dict" <> (WL.brackets . WL.hcat) (WL.punctuate "," [genTypeV1 k, genTypeV1 v])
+      text "typing.Dict" <> (WL.brackets . WL.hcat) (WL.punctuate ", " [genTypeV1 k, genTypeV1 v])
 
 -- -----------------------------------------------------------------------------
 
