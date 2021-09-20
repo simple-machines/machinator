@@ -187,22 +187,25 @@ isEnum cs = go cs
 -- | Generates a Python enumeration.
 enum :: Name -> Maybe Docs -> [(Name, Maybe Docs)] -> Doc a
 enum n@(Name klass) mDoc ctors =
+  let
+    instances = fmap (first instanceName) ctors
+  in
     WL.linebreak WL.<#>
     WL.vsep [
         string "class" WL.<+> text klass WL.<> WL.parens (string "enum.Enum") WL.<> ":",
         WL.indent 4 . WL.vsep $ (
           googleDocstring mDoc [] Nothing [] <>
-          fmap def ctors <>
-          serdeEnum n (fmap fst ctors)
+          fmap def instances <>
+          serdeEnum n (fmap fst instances)
         )
     ]
   where
+    instanceName (Name n) = Name (if klass `T.isSuffixOf` n then T.dropEnd (T.length klass) n else n)
     def (Name m, doc) =
-      let d = WL.hsep [text m, WL.char '=', WL.dquotes $ (text . T.toLower . value) m]
+      let d = WL.hsep [text  m, WL.char '=', WL.dquotes $ (text . T.toLower) m]
       in case doc of
         Nothing -> d
         docs -> WL.vsep (d : googleDocstring docs [] Nothing [])
-    value v = T.toLower $ if klass `T.isSuffixOf` v then T.dropEnd (T.length klass) v else v
 
 
 -- | Generate the JSON de-/serialisation methods for an enumeration.
@@ -214,6 +217,8 @@ serdeEnum n ctors =
   , generateFromJsonEnum n
   , WL.mempty
   , generateToJsonEnum
+  , WL.mempty
+  , generateJsonKeyEnum n
   ]
 
 
@@ -244,7 +249,7 @@ generateJsonSchemaEnum (Name klass) ctors =
 -- | Generate the JSON parsing method for an enumeration.
 generateFromJsonEnum :: Name -> Doc a
 generateFromJsonEnum (Name klass) =
-  classmethod . method "from_json" "cls" [(Name "data", Left (GroundT StringT))] $ WL.vsep (
+  classmethod . method "from_json" "cls" [(Name "data", Right "dict")] $ WL.vsep (
       googleDocstring
         (Just . Docs $ "Validate and parse JSON data into an instance of " <> klass <> ".")
         [(Name "data", GroundT StringT, "JSON data to validate and parse.")]
@@ -270,6 +275,37 @@ generateFromJsonEnum (Name klass) =
         ]
       ]
     )
+
+
+-- | Generated the JSON de-/derialisations methods for enumerations used as a key.
+generateJsonKeyEnum :: Name -> Doc a
+generateJsonKeyEnum (Name klass) =
+    WL.vsep [
+        fromKey
+      , WL.mempty
+      , toKey
+    ]
+  where
+    fromKey =
+      classmethod . method "from_json_key" "cls" [(Name "data", Right "str")] $ WL.vsep (
+        googleDocstring
+          (Just . Docs $ "Validate and parse a value from a JSON dictionary key.")
+          [(Name "data", GroundT StringT, "JSON data to validate and parse.")]
+          (Just $ "An instance of " <> klass <> ".")
+          []
+        <> [
+          "return" <+> text klass <> WL.parens ("str" <> WL.parens "data")
+        ]
+      )
+    toKey =
+      method "to_json_key" "self" [] $ WL.vsep (
+        googleDocstring
+          (Just . Docs $ "Serialised this instanse as a JSON string for use as a dictionary key.")
+          []
+          (Just $ "A JSON string ready to be used as a key.")
+          []
+        <> ["return" <+> "str" <> WL.parens "self.value"]
+      )
 
 
 -- | Generate the JSON serialisation method for an enumeration.
@@ -319,8 +355,35 @@ serdeWrapper n field@(_, ty) =
   , generateFromJsonWrapper n ty
   , WL.mempty
   , generateToJsonWrapper n field
-  ]
+  ] <> generateJsonKeysWrapper n field
 
+
+generateJsonKeysWrapper :: Name -> (Name, Type) -> [Doc a]
+generateJsonKeysWrapper (Name klass) (Name field, ty) =
+    fromMaybe [] . with (format ty) $ \(parse, print) ->
+      [ WL.mempty
+      , classmethod . method "from_json_key" "cls" [(Name "data", Right "str")] $ WL.vsep [
+          "\"\"\"Parse a JSON string such as a dictionary key.\"\"\"",
+          "return" <+> text klass <> WL.parens (parse <> WL.parens "data")
+        ]
+      , WL.mempty
+      , method "to_json_key" "self" [] $ WL.vsep [
+          "\"\"\"Serialise as a JSON string suitable for use as a dictionary key.\"\"\"",
+          "return" <+> print <> WL.parens ("self." <> text field)
+        ]
+      ]
+  where
+    format :: Type -> Maybe (Doc a, Doc a)
+    format (GroundT t) = case t of
+      StringT -> Just ("str", "str")
+      BoolT -> Just ("bool", "str")
+      IntT -> Just ("int", "str")
+      LongT -> Just ("int", "str")
+      DoubleT -> Just ("float", "str")
+      UUIDT -> Just ("(lambda s: uuid.UUID(hex=s))", "str")
+      DateT -> Just ("datetime.date.fromisoformat", "(lambda d: d.isoformat())")
+      DateTimeT -> Just ("(lambda s: datetime.datetime.strptime(s, '%Y-%m-%dT%H:%M:%S.%f%z'))", "(lambda d: d.strftime('%Y-%m-%dT%H:%M:%S.%f%z'))")
+    format _ = Nothing
 
 -- | Generate magic methods that delegate to the wrapped value.
 generateMagicMethods :: (Name, Type) -> [Doc a]
@@ -693,6 +756,22 @@ schemaType ty =
         ("additionalProperties", schemaType v)
       ]
 
+-- | JSON keys are strings, we need to serialise the JSON encoding to a string.
+serialiseKey :: Doc a -> Type -> Doc a
+serialiseKey value ty = case ty of
+  Variable _ -> value <> ".to_json_key()"
+  GroundT gr -> case gr of
+    StringT -> "str" <> WL.parens value
+    BoolT -> "str" <> WL.parens value
+    IntT -> "str" <> WL.parens value
+    LongT -> "str" <> WL.parens value
+    DoubleT -> "str" <> WL.parens value
+    UUIDT -> "str" <> WL.parens value
+    DateT -> value <> ".isoformat()"
+    DateTimeT -> value <> ".strftime('%Y-%m-%dT%H:%M:%S.%f%z')" -- TODO: We should force timezones?
+  ListT _ -> "raise ValueError('Cannot use lists as keys')"
+  MaybeT _ -> "raise ValueError('Cannot use optional values as keys')"
+  MapT _ _ -> "raise ValueError('Cannot use maps as keys')"
 
 -- | Generate the Python expression to serialise a type to JSON.
 serialiseType :: Doc a -> Type -> Doc a
@@ -710,12 +789,30 @@ serialiseType value ty = case ty of
   ListT ty' -> "[" <> serialiseType "v" ty' <> " for v in " <> value <> "]"
   MaybeT ty' -> "(" <> "lambda v: v and " <> serialiseType "v" ty' <> ")(" <> value <> ")"
   -- TODO: This just blindly assumes that k will be serialised to a str and not any other JSON document.
-  MapT k v -> "{" <> serialiseType "k" k <> ":" <+> serialiseType "v" v <+> "for" <+> "k, v" <+> "in" <+> value <> "}"
+  MapT k v -> "{" <> serialiseKey "k" k <> ":" <+> serialiseType "v" v <+> "for" <+> "k, v" <+> "in" <+> value <> ".items()}"
+
+
+-- | JSON keys are strings, we need to serialise the JSON encoding to a string.
+parseKey :: Doc a -> Type -> Doc a
+parseKey value ty = case ty of
+  Variable (Name t) -> text t <> ".from_json_key" <> WL.parens value
+  GroundT gr -> case gr of
+    StringT -> "str" <> WL.parens value
+    BoolT -> "bool" <> WL.parens value -- TODO
+    IntT -> "int" <> WL.parens value
+    LongT -> "int" <> WL.parens value
+    DoubleT -> "float" <> WL.parens value
+    UUIDT -> "uuid.UUID" <> WL.parens ("hex=" <> value)
+    DateT -> "datetime.date.fromisoformat" <> WL.parens value
+    DateTimeT -> "datetime.datetime.strptime("<> value <> ", '%Y-%m-%dT%H:%M:%S.%f%z')"
+  ListT _ -> "raise ValueError('Cannot use lists as keys')"
+  MaybeT _ -> "raise ValueError('Cannot use optional values as keys')"
+  MapT _ _ -> "raise ValueError('Cannot use maps as keys')"
 
 -- | Generate the Python expression to parse a type from JSON.
 parseType :: Doc a -> Type -> Doc a
 parseType value ty = case ty of
-  Variable (Name t) -> text t <> ".from_json(" <> value <> ")"
+  Variable (Name t) -> text t <> ".from_json" <> WL.parens value
   GroundT gr -> case gr of
     -- TODO: We validate before parsing, so at least some of these probably aren't necessary.
     StringT -> "str" <> WL.parens value
@@ -737,7 +834,7 @@ parseType value ty = case ty of
   MapT k v ->
     WL.group (
       "{" WL.<##>
-        flatIndent 4 (parseType "k" k <> ":" <+> parseType "v" v <+> "for" <+> "k, v" <+> "in" <+> value) WL.<##>
+        flatIndent 4 (parseKey "k" k <> ":" <+> parseType "v" v <+> "for" <+> "k, v" <+> "in" <+> value <> ".items()") WL.<##>
       "}"
     )
 

@@ -7,6 +7,7 @@ module Machinator.Scala.Scheme.Types.Codegen (
   ) where
 
 
+import           Data.Foldable (foldl1)
 import           Data.List.NonEmpty (NonEmpty (..))
 import           Data.Set (Set)
 import qualified Data.Set as S
@@ -48,9 +49,9 @@ genTypesV1 def@(Definition _ mDoc _) =
 genTypesV1' :: Definition -> Doc a
 genTypesV1' (Definition name _ dec) =
   case dec of
-    Variant (c1 :| cts) ->
+    Variant ctors@(c1 :| cts) ->
       WL.vsep $
-          genVariantV1 name Nothing (variantProperties (c1:cts))
+          genVariantV1 name Nothing (variantProperties ctors)
         : fmap (uncurry3 (genConstructorV1 name)) (c1:cts)
 
     Record fts ->
@@ -90,10 +91,10 @@ genTypeV1 ty =
       string "Map" <> WL.brackets (genTypeV1 k <> "," <+> genTypeV1 v)
 
 -- | Find the set of common properties in the constructors of a variant.
-variantProperties :: [(Name, Maybe Docs, [(Name, Type)])] -> [(Name, Type)]
+variantProperties :: NonEmpty (Name, Maybe Docs, [(Name, Type)]) -> [(Name, Type)]
 variantProperties ctors =
   let fs = fmap (\(_, _, f) -> S.fromList f) ctors
-  in S.toAscList (foldr S.intersection (S.unions fs) fs)
+  in S.toAscList (foldl1 S.intersection fs)
 
 -- | Generate the sealed trait for a variant type.
 genVariantV1 :: Name -> Maybe Docs -> [(Name, Type)] -> Doc a
@@ -103,7 +104,7 @@ genVariantV1 (Name n) mDoc fs =
     hd = "sealed trait" <+> text n
     built = case fs of
       [] -> hd
-      fs -> hd <+> "{" WL.<##> WL.indent 4 (WL.vsep (fmap field fs)) WL.<##> "}"
+      _  -> hd <+> "{" WL.<##> WL.indent 4 (WL.vsep (fmap field fs)) WL.<##> "}"
   in case mDoc of
     Just (Docs docs) ->
       WL.vsep [ simpleComment docs, built ]

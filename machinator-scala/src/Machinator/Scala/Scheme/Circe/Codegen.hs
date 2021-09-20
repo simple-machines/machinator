@@ -1,5 +1,6 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PatternGuards #-}
 module Machinator.Scala.Scheme.Circe.Codegen (
     generateCirceV1
   , generateToJsonV1Companion
@@ -28,21 +29,19 @@ generateCirceV1 defs =
   concat . with defs $ \def -> [
       generateToJsonV1 def
     , generateFromJsonV1 def
-    , generateToJsonKeyV1 def
-    , generateFromJsonKeyV1 def
-    ]
+    ] <> generateCirceKeyCodecsV1 def
 
 
 generateToJsonV1Companion :: M.Definition -> Text
 generateToJsonV1Companion def@(M.Definition (M.Name tn) _ _) =
   renderText $
     text "object" <+> text tn <+>
-      code_block [
+      code_block (
+        [
           generateToJsonV1 def
         , generateFromJsonV1 def
-        , generateToJsonKeyV1 def
-        , generateFromJsonKeyV1 def
-        ]
+        ] <> generateCirceKeyCodecsV1 def
+      )
 
 typeNameV1 :: M.Definition -> Doc a
 typeNameV1 (M.Definition (M.Name tn) _ (M.Variant _)) = text tn
@@ -140,38 +139,28 @@ generateFromJsonV1 def@(M.Definition (M.Name tn) _ typ) =
             )
       )
 
-
--- | Generate a Circe KeyEncoder (for newtyped ground types only).
-generateToJsonKeyV1 :: M.Definition -> Doc a
-generateToJsonKeyV1 def@(M.Definition (M.Name tn) _ (M.Newtype (M.Name wrapper, wrappedType@(M.GroundT _)))) =
-  text "implicit val"
-    <+> text tn <> text "KeyEncoder" <> text ":"
-    <+> text "io.circe.KeyEncoder" <> WL.brackets (typeNameV1 def)
-    <+> text "="
-    <+> code_block
-      [ case_expr
-          (text tn <> WL.tupled [text wrapper])
-          (text "io.circe.KeyEncoder" <> WL.brackets (genTypeV1 wrappedType) <> text ".apply" <> WL.parens (text wrapper))
-      ]
-generateToJsonKeyV1 _ = WL.mempty
-
--- | Generate a Circe KeyDecoder (for newtyped ground types only).
-generateFromJsonKeyV1 :: M.Definition -> Doc a
-generateFromJsonKeyV1 def@(M.Definition (M.Name tn) _ (M.Newtype (_, M.GroundT ty))) =
-    fromMaybe WL.mempty $ with (parse ty) $ \parser ->
-      text "implicit val"
-        <+> text tn <> text "KeyDecoder" <> text ":"
-        <+> text "io.circe.KeyDecoder" <> WL.brackets (typeNameV1 def)
-        <+> text "="
-        <+> code_block
-          [ WL.parens "key: String" <+> "=>" <+> "scala.util.Try" <> WL.parens (text tn <> ".apply" <> WL.parens parser) <> ".toOption"
-          ]
-  where
-    parse M.IntT = Just "key.toInt"
-    parse M.BoolT = Just "key.toBoolean"
-    parse M.UUIDT = Just "java.util.UUID.fromString(key)"
-    parse _ = Nothing
-generateFromJsonKeyV1 _ = WL.mempty
+generateCirceKeyCodecsV1 :: M.Definition -> [Doc a]
+generateCirceKeyCodecsV1 def@(M.Definition (M.Name tn) _ (M.Newtype (M.Name wrapper, wrappedType@(M.GroundT _)))) =
+  [
+    text "implicit val"
+      <+> text tn <> text "KeyEncoder" <> text ":"
+      <+> text "io.circe.KeyEncoder" <> WL.brackets (typeNameV1 def)
+      <+> text "="
+      <+> code_block
+        [ case_expr
+            (text tn <> WL.tupled [text wrapper])
+            (text "io.circe.KeyEncoder" <> WL.brackets (genTypeV1 wrappedType) <> text ".apply" <> WL.parens (text wrapper))
+        ],
+    text "implicit val"
+      <+> text tn <> text "KeyDecoder" <> text ":"
+      <+> text "io.circe.KeyDecoder" <> WL.brackets (typeNameV1 def)
+      <+> text "="
+      <+> code_block
+        [
+          text "io.circe.KeyDecoder" <> WL.brackets (genTypeV1 wrappedType) <> text ".map" <> WL.parens (text tn <> ".apply")
+        ]
+  ]
+generateCirceKeyCodecsV1 _ = []
 
 -- -----------------------------------------------------------------------------
 
