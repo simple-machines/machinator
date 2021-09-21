@@ -77,6 +77,7 @@ data Type
   | GroundT Ground
   | ListT Type
   | MaybeT Type
+  | MapT Type Type
   deriving (Eq, Ord, Show, Data, Typeable, Generic)
 
 -- | Ground types, e.g. platform primitives.
@@ -149,20 +150,22 @@ free d =
   case d of
     Variant nts ->
       fold . with nts $ \(_, _, fts) ->
-        S.fromList . catMaybes . with fts $ \(_, t) -> freeInType t
+        mconcat . with fts $ \(_, t) -> freeInType t
     Record fts ->
-      S.fromList . catMaybes . with fts $ \(_, t) -> freeInType t
+      mconcat . with fts $ \(_, t) -> freeInType t
     Newtype (_, t) ->
-      S.fromList $ catMaybes [freeInType t]
+      mconcat [freeInType t]
 
-freeInType :: Type -> Maybe Name
+freeInType :: Type -> Set Name
 freeInType t =
   case t of
     Variable n ->
-      pure n
+      S.singleton n
     GroundT _ ->
-      empty
+      S.empty
     ListT lt ->
       freeInType lt
     MaybeT lt ->
       freeInType lt
+    MapT lt rt ->
+      freeInType lt `S.union` freeInType rt

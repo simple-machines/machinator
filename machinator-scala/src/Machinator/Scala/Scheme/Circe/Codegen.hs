@@ -1,5 +1,6 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PatternGuards #-}
 module Machinator.Scala.Scheme.Circe.Codegen (
     generateCirceV1
   , generateToJsonV1Companion
@@ -28,24 +29,30 @@ generateCirceV1 defs =
   concat . with defs $ \def -> [
       generateToJsonV1 def
     , generateFromJsonV1 def
-    ]
+    ] <> generateCirceKeyCodecsV1 def
 
 
 generateToJsonV1Companion :: M.Definition -> Text
 generateToJsonV1Companion def@(M.Definition (M.Name tn) _ _) =
   renderText $
     text "object" <+> text tn <+>
-      code_block [
+      code_block (
+        [
           generateToJsonV1 def
         , generateFromJsonV1 def
-        ]
+        ] <> generateCirceKeyCodecsV1 def
+      )
 
+typeNameV1 :: M.Definition -> Doc a
+typeNameV1 (M.Definition (M.Name tn) _ (M.Variant _)) = text tn
+typeNameV1 (M.Definition (M.Name tn) _ (M.Record _)) = text tn
+typeNameV1 (M.Definition (M.Name tn) _ (M.Newtype _)) = text tn
 
 generateToJsonV1 :: M.Definition -> Doc a
-generateToJsonV1 (M.Definition (M.Name tn) _ typ) =
+generateToJsonV1 def@(M.Definition (M.Name tn) _ typ) =
   text "implicit val"
     <+> text tn <> text "Encoder" <> text ":"
-    <+> text "io.circe.Encoder" <> WL.brackets (text tn)
+    <+> text "io.circe.Encoder" <> WL.brackets (typeNameV1 def)
     <+> text "="
     <+> code_block
       [ case typ of
@@ -79,15 +86,14 @@ generateToJsonV1 (M.Definition (M.Name tn) _ typ) =
               (text "io.circe.Encoder" <> WL.brackets (genTypeV1 wrappedType) <> text ".apply" <> WL.parens (text wrapper))
       ]
 
-
 generateFromJsonV1 :: M.Definition -> Doc a
-generateFromJsonV1 (M.Definition (M.Name tn) _ typ) =
+generateFromJsonV1 def@(M.Definition (M.Name tn) _ typ) =
   text "implicit val"
     <+> text tn
     <> text "Decoder"
     <> text ":"
     <+> text "io.circe.Decoder"
-    <> WL.brackets (text tn)
+    <> WL.brackets (typeNameV1 def)
     <+> text "="
     <> WL.hardline
     <> WL.indent 2
@@ -118,6 +124,8 @@ generateFromJsonV1 (M.Definition (M.Name tn) _ typ) =
                                  (text "Left(io.circe.DecodingFailure(s\"Unknown ADT constructor $unknown.\", c.history))")
                              ]
                       )
+                M.Record [] ->
+                  text "Right" <> WL.parens (text tn <> WL.tupled [])
                 M.Record fts ->
                   for_yield
                     ( with fts $ \(M.Name f, ft) ->
@@ -130,6 +138,29 @@ generateFromJsonV1 (M.Definition (M.Name tn) _ typ) =
                     (text tn <> WL.tupled [text wrapper])
             )
       )
+
+generateCirceKeyCodecsV1 :: M.Definition -> [Doc a]
+generateCirceKeyCodecsV1 def@(M.Definition (M.Name tn) _ (M.Newtype (M.Name wrapper, wrappedType@(M.GroundT _)))) =
+  [
+    text "implicit val"
+      <+> text tn <> text "KeyEncoder" <> text ":"
+      <+> text "io.circe.KeyEncoder" <> WL.brackets (typeNameV1 def)
+      <+> text "="
+      <+> code_block
+        [ case_expr
+            (text tn <> WL.tupled [text wrapper])
+            (text "io.circe.KeyEncoder" <> WL.brackets (genTypeV1 wrappedType) <> text ".apply" <> WL.parens (text wrapper))
+        ],
+    text "implicit val"
+      <+> text tn <> text "KeyDecoder" <> text ":"
+      <+> text "io.circe.KeyDecoder" <> WL.brackets (typeNameV1 def)
+      <+> text "="
+      <+> code_block
+        [
+          text "io.circe.KeyDecoder" <> WL.brackets (genTypeV1 wrappedType) <> text ".map" <> WL.parens (text tn <> ".apply")
+        ]
+  ]
+generateCirceKeyCodecsV1 _ = []
 
 -- -----------------------------------------------------------------------------
 

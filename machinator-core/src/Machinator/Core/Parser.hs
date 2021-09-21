@@ -246,6 +246,8 @@ types' v = do
   case x of
     Name "List" ->
       hasFeature v HasLists *> (ListT <$> types v)
+    Name "Map" ->
+      hasFeature v HasMaps  *> (MapT <$> types v <*> types v)
     Name "Maybe" ->
       hasFeature v HasLists *> (MaybeT <$> types v)
     _ ->

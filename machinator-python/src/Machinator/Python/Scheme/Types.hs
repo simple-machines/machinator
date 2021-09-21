@@ -51,10 +51,11 @@ renderModule fp mn@(ModuleName n) imports defs =
     , "import dataclasses  # noqa: F401"
     , "import datetime  # noqa: F401"
     , "import enum  # noqa: F401"
-    , "import logging  # noqa: F401"
-    , "import uuid  # noqa: F401"
-    , "import typing  # noqa: F401"
+    , "import json  # noqa: F401"
     , "import jsonschema  # noqa: F401"
+    , "import logging  # noqa: F401"
+    , "import typing  # noqa: F401"
+    , "import uuid  # noqa: F401"
     ]
     <> maybe mempty (("":) . fmap renderImport . M.toList) (mfilter (not . null) $ M.lookup mn imports)
     <> with defs Codegen.genTypesV1
