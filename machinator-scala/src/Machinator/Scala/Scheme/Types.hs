@@ -20,6 +20,7 @@ import           P
 
 import qualified System.FilePath.Posix as FilePath
 import           System.IO (FilePath)
+import Data.List (intersperse)
 
 
 types :: ScalaTypesVersion -> Text -> [DefinitionFile] -> Either ScalaTypesError [(FilePath, Text)]
@@ -43,8 +44,8 @@ renderModule mn@(ModuleName n) imports defs =
   T.unlines [
       T.unwords ["package", n]
     , maybe mempty (T.unlines . fmap renderImports . M.toList) (mfilter (not . null) $ M.lookup mn imports)
-    , T.unlines . with defs $ \def ->
-        Codegen.genTypesV1 def <> "\n" <> Codegen.generateToJsonV1Companion def
+    , T.unlines . intersperse "" . with defs $ \def ->
+        Codegen.genTypesV1 def <> "\n\n" <> Codegen.generateToJsonV1Companion def
     ]
 
 renderImports :: (ModuleName, Set Name) -> Text
