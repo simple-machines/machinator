@@ -225,7 +225,7 @@ serdeEnum n ctors =
 -- | Generate the JSON schema method for an enumeration.
 generateJsonSchemaEnum :: Name -> [Name] -> Doc a
 generateJsonSchemaEnum (Name klass) ctors =
-  classmethod . method "json_schema" "cls" [] $ WL.vsep (
+  classmethod . method "json_schema" "cls" [] (Variable (Name "dict")) $ WL.vsep (
     googleDocstring
       (Just . Docs $ "JSON schema for '" <> klass <> "'.")
       []
@@ -248,11 +248,11 @@ generateJsonSchemaEnum (Name klass) ctors =
 
 -- | Generate the JSON parsing method for an enumeration.
 generateFromJsonEnum :: Name -> Doc a
-generateFromJsonEnum (Name klass) =
-  classmethod . method "from_json" "cls" [(Name "data", Right "dict")] $ WL.vsep (
+generateFromJsonEnum n@(Name klass) =
+  classmethod . method "from_json" "cls" [(Name "data", Right "dict")] (Variable n) $ WL.vsep (
       googleDocstring
         (Just . Docs $ "Validate and parse JSON data into an instance of " <> klass <> ".")
-        [(Name "data", GroundT StringT, "JSON data to validate and parse.")]
+        [(Name "data", Variable (Name "dict"), "JSON data to validate and parse.")]
         (Just $ "An instance of " <> klass <> ".")
         [
           (Name "ValidationError", "When schema validation fails."),
@@ -279,7 +279,7 @@ generateFromJsonEnum (Name klass) =
 
 -- | Generated the JSON de-/derialisations methods for enumerations used as a key.
 generateJsonKeyEnum :: Name -> Doc a
-generateJsonKeyEnum (Name klass) =
+generateJsonKeyEnum n@(Name klass) =
     WL.vsep [
         fromKey
       , WL.mempty
@@ -287,7 +287,7 @@ generateJsonKeyEnum (Name klass) =
     ]
   where
     fromKey =
-      classmethod . method "from_json_key" "cls" [(Name "data", Right "str")] $ WL.vsep (
+      classmethod . method "from_json_key" "cls" [(Name "data", Right "str")] (Variable n) $ WL.vsep (
         googleDocstring
           (Just . Docs $ "Validate and parse a value from a JSON dictionary key.")
           [(Name "data", GroundT StringT, "JSON data to validate and parse.")]
@@ -298,7 +298,7 @@ generateJsonKeyEnum (Name klass) =
         ]
       )
     toKey =
-      method "to_json_key" "self" [] $ WL.vsep (
+      method "to_json_key" "self" [] (GroundT StringT) $ WL.vsep (
         googleDocstring
           (Just . Docs $ "Serialised this instanse as a JSON string for use as a dictionary key.")
           []
@@ -311,7 +311,7 @@ generateJsonKeyEnum (Name klass) =
 -- | Generate the JSON serialisation method for an enumeration.
 generateToJsonEnum :: Doc a
 generateToJsonEnum =
-  method "to_json" "self" [] $ WL.vsep (
+  method "to_json" "self" [] (Variable (Name "dict")) $ WL.vsep (
     googleDocstring (Just (Docs "Serialise this instance as JSON.")) [] (Just "JSON data ready to be serialised.") [] <> [
     text "return {'adt_type': self.value}"
   ])
@@ -359,15 +359,15 @@ serdeWrapper n field@(_, ty) =
 
 
 generateJsonKeysWrapper :: Name -> (Name, Type) -> [Doc a]
-generateJsonKeysWrapper (Name klass) (Name field, ty) =
+generateJsonKeysWrapper n@(Name klass) (Name field, ty) =
     fromMaybe [] . with (format ty) $ \(parse, print) ->
       [ WL.mempty
-      , classmethod . method "from_json_key" "cls" [(Name "data", Right "str")] $ WL.vsep [
+      , classmethod . method "from_json_key" "cls" [(Name "data", Right "str")] (Variable n) $ WL.vsep [
           "\"\"\"Parse a JSON string such as a dictionary key.\"\"\"",
           "return" <+> text klass <> WL.parens (parse <> WL.parens "data")
         ]
       , WL.mempty
-      , method "to_json_key" "self" [] $ WL.vsep [
+      , method "to_json_key" "self" [] (GroundT StringT) $ WL.vsep [
           "\"\"\"Serialise as a JSON string suitable for use as a dictionary key.\"\"\"",
           "return" <+> print <> WL.parens ("self." <> text field)
         ]
@@ -382,7 +382,7 @@ generateJsonKeysWrapper (Name klass) (Name field, ty) =
       DoubleT -> Just ("float", "str")
       UUIDT -> Just ("(lambda s: uuid.UUID(hex=s))", "str")
       DateT -> Just ("datetime.date.fromisoformat", "(lambda d: d.isoformat())")
-      DateTimeT -> Just ("(lambda s: datetime.datetime.strptime(s, '%Y-%m-%dT%H:%M:%S.%f%z'))", "(lambda d: d.strftime('%Y-%m-%dT%H:%M:%S.%f%z'))")
+      DateTimeT -> Just ("(lambda s: isodate.parse_datetime(s))", "(lambda d: d.strftime('%Y-%m-%dT%H:%M:%S.%f%z'))")
     format _ = Nothing
 
 -- | Generate magic methods that delegate to the wrapped value.
@@ -398,25 +398,25 @@ generateMagicMethods (Name n, ty) =
       _               -> []
   where
     strMethod = WL.mempty : [
-        method "__str__" "self" [] $ WL.vsep (
+        method "__str__" "self" [] (GroundT StringT) $ WL.vsep (
           googleDocstring (Just . Docs $ "Return a str of the wrapped value.") [] Nothing [] <>
           ["return" <+> "str" <> WL.parens ("self." <> text n)]
         )
       ]
     floatMethod = WL.mempty : [
-        method "__float__" "self" [] $ WL.vsep (
+        method "__float__" "self" [] (GroundT DoubleT) $ WL.vsep (
           googleDocstring (Just . Docs $ "Return a float of the wrapped value.") [] Nothing [] <>
           ["return" <+> "float" <> WL.parens ("self." <> text n)]
         )
       ]
     intMethod = WL.mempty : [
-        method "__int__" "self" [] $ WL.vsep (
+        method "__int__" "self" [] (GroundT IntT) $ WL.vsep (
           googleDocstring (Just . Docs $ "Return an int of the wrapped value.") [] Nothing [] <>
           ["return" <+> "int" <> WL.parens ("self." <> text n)]
         )
       ]
     iterMethod = WL.mempty : [
-        method "__iter__" "self" [] $ WL.vsep (
+        method "__iter__" "self" [] (Variable (Name ("typing.Iterator[" <> n <> "]"))) $ WL.vsep (
           googleDocstring (Just . Docs $ "Return an iterator of the wrapper list.") [] Nothing [] <>
           ["return" <+> "iter" <> WL.parens ("self." <> text n)]
         )
@@ -425,7 +425,7 @@ generateMagicMethods (Name n, ty) =
 -- | Generate the JSON schema method for a newtype wrapper.
 generateJsonSchemaWrapper :: Name -> Type -> Doc a
 generateJsonSchemaWrapper (Name n) t =
-  classmethod . method "json_schema" "cls" [] $ WL.vsep (
+  classmethod . method "json_schema" "cls" [] (Variable (Name "dict")) $ WL.vsep (
     googleDocstring
       (Just . Docs $ "Return the JSON schema for " <> n <> " data.")
       []
@@ -439,11 +439,11 @@ generateJsonSchemaWrapper (Name n) t =
 
 -- | Generate the JSON parsing method for a newtype wrapper.
 generateFromJsonWrapper :: Name -> Type -> Doc a
-generateFromJsonWrapper (Name klass) ty =
-  classmethod . method "from_json" "cls" [(Name "data", Left ty)] $ WL.vsep (
+generateFromJsonWrapper n@(Name klass) ty =
+  classmethod . method "from_json" "cls" [(Name "data", Right "dict")] (Variable n) $ WL.vsep (
       googleDocstring
         (Just . Docs $ "Validate and parse JSON data into an instance of " <> klass <> ".")
-        [(Name "data", ty, "JSON data to validate and parse.")]
+        [(Name "data", Variable (Name "dict"), "JSON data to validate and parse.")]
         (Just $ "An instance of " <> klass <> ".")
         [
           (Name "ValidationError", "When schema validation fails."),
@@ -474,7 +474,7 @@ generateToJsonWrapper _ (f, ty) =
   let
     Name field = M.findWithDefault f f (mangleNames (S.singleton f))
   in
-    method "to_json" "self" [] $ WL.vsep (
+    method "to_json" "self" [] (Variable (Name "dict")) $ WL.vsep (
       googleDocstring (Just (Docs "Serialise this instance as JSON.")) [] (Just "Data ready to serialise as JSON.") [] <> [
       text "return " <> serialiseType ("self." <> text field) ty
     ])
@@ -527,8 +527,8 @@ serdeVariant n =
 
 -- | Generate the JSON schema method for a variant wrapperclass.
 generateJsonSchemaVariant :: Name -> Doc a
-generateJsonSchemaVariant (Name klass) =
-  classmethod . method "json_schema" "cls" [] $ WL.vsep (
+generateJsonSchemaVariant n@(Name klass) =
+  classmethod . method "json_schema" "cls" [] (Variable n) $ WL.vsep (
     googleDocstring
       (Just . Docs $ "JSON schema for variant " <> klass <> ".")
       []
@@ -552,8 +552,8 @@ generateJsonSchemaVariant (Name klass) =
 
 -- | Generate the JSON parsing method for a variant wrapperclass.
 generateFromJsonVariant :: Name -> Doc a
-generateFromJsonVariant (Name klass) =
-  classmethod . method "from_json" "cls" [(Name "data", Right "dict")] $
+generateFromJsonVariant n@(Name klass) =
+  classmethod . method "from_json" "cls" [(Name "data", Right "dict")] (Variable n) $
     WL.vsep (
       googleDocstring
         (Just . Docs $ "Validate and parse JSON data into an instance of " <> klass <> ".")
@@ -592,7 +592,7 @@ generateFromJsonVariant (Name klass) =
 -- | Generate the JSON serialisation method for a dataclass.
 generateToJsonVariant :: Name -> Doc a
 generateToJsonVariant _ =
-  abstractmethod $ method "to_json" "self" [] $ WL.vsep (
+  abstractmethod $ method "to_json" "self" [] (Variable (Name "dict")) $ WL.vsep (
       googleDocstring (Just (Docs "Serialise this instance as JSON.")) [] (Just "Data ready to serialise as JSON.") [] <> [
       "raise" <+> "NotImplementedError"
     ])
@@ -639,7 +639,7 @@ serde n disc flds =
 -- | Generate the JSON schema method for a Python dataclass.
 generateJsonSchema :: Name -> Bool -> [(Name, Type)] -> Doc a
 generateJsonSchema (Name n) disc flds =
-    classmethod . method "json_schema" "cls" [] $ WL.vsep (
+    classmethod . method "json_schema" "cls" [] (Variable (Name "dict")) $ WL.vsep (
       googleDocstring (Just (Docs $ "Return the JSON schema for " <> n <> " data.")) [] (Just "A Python dictionary describing the JSON schema.") [] <> [
       "return" <+> dict [
         ("type", WL.dquotes "object"),
@@ -675,7 +675,7 @@ generateToJson _ disc fieldDefs =
     discriminatorField False = []
     discriminatorField True = [(discriminatorProperty, "self.ADT_TYPE")]
   in
-    method "to_json" "self" [] $ WL.vsep (
+    method "to_json" "self" [] (Variable (Name "dict")) $ WL.vsep (
       googleDocstring (Just (Docs "Serialise this instance as JSON.")) [] (Just "Data ready to serialise as JSON.") [] <> [
       text "return " <> dict (
         discriminatorField disc <> fmap serialiseField properties
@@ -685,7 +685,7 @@ generateToJson _ disc fieldDefs =
 
 -- | Generate the JSON parsing method for a dataclass.
 generateFromJson :: Name -> [(Name, Type)] -> Doc a
-generateFromJson (Name klass) fieldDefs =
+generateFromJson name@(Name klass) fieldDefs =
   let
     mangle = mangleNames . S.fromList . fmap fst $ fieldDefs
     -- (fieldName, jsonProperty, type)
@@ -695,7 +695,7 @@ generateFromJson (Name klass) fieldDefs =
     parseField (Name f, Name p, ty) =
       text f <> "=" <> parseType ("data[" <> WL.dquotes (text p) <> "]") ty <> ","
   in
-    classmethod . method "from_json" "cls" [(Name "data", Right "dict")] $ WL.vsep (
+    classmethod . method "from_json" "cls" [(Name "data", Right "dict")] (Variable name) $ WL.vsep (
       googleDocstring
         (Just . Docs $ "Validate and parse JSON data into an instance of " <> klass <> ".")
         [(Name "data", Variable (Name "dict"), "JSON data to validate and parse.")]
@@ -804,7 +804,7 @@ parseKey value ty = case ty of
     DoubleT -> "float" <> WL.parens value
     UUIDT -> "uuid.UUID" <> WL.parens ("hex=" <> value)
     DateT -> "datetime.date.fromisoformat" <> WL.parens value
-    DateTimeT -> "datetime.datetime.strptime("<> value <> ", '%Y-%m-%dT%H:%M:%S.%f%z')"
+    DateTimeT -> "isodate.parse_datetime("<> value <> ")"
   ListT _ -> "raise ValueError('Cannot use lists as keys')"
   MaybeT _ -> "raise ValueError('Cannot use optional values as keys')"
   MapT _ _ -> "raise ValueError('Cannot use maps as keys')"
@@ -822,7 +822,7 @@ parseType value ty = case ty of
     DoubleT -> "float" <> WL.parens value
     UUIDT -> "uuid.UUID" <> WL.parens ("hex=" <> value)
     DateT -> "datetime.date.fromisoformat" <> WL.parens value
-    DateTimeT -> "datetime.datetime.strptime("<> value <> ", '%Y-%m-%dT%H:%M:%S.%f%z')"
+    DateTimeT -> "isodate.parse_datetime("<> value <> ")"
   ListT ty' -> "[" <> parseType "v" ty' <> " for v in " <> value <> "]"
   MaybeT ty' -> WL.group (
       "(" WL.<##>
@@ -855,10 +855,10 @@ classmethod body =
   ]
 
 -- | Generate a Python method definition.
-method :: Text -> Text -> [(Name, Either Type Text)] -> Doc a -> Doc a
-method name self args body =
+method :: Text -> Text -> [(Name, Either Type Text)] -> Type -> Doc a -> Doc a
+method name self args ret body =
     WL.vsep [
-      string "def" WL.<+> text name <> WL.encloseSep WL.lparen WL.rparen WL.comma (text self : fmap arg args) WL.<> WL.char ':'
+      string "def" WL.<+> text name <> WL.encloseSep WL.lparen WL.rparen WL.comma (text self : fmap arg args) WL.<+> "->" WL.<+> genTypeV1 ret WL.<> WL.char ':'
     , WL.indent 4 body
     ]
   where
