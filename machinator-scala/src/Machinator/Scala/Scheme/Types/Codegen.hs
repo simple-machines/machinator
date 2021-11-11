@@ -141,7 +141,7 @@ genRecordV1 _ (Name n) fts =
   WL.hang 2 $
     text "case class" <+> text n <> WL.tupled (
       with fts $ \(Name fn, ty) ->
-        text fn <+> string ":" <+> genTypeV1 ty
+        text fn <> string ":" <+> genTypeV1 ty
     )
 
 -- -----------------------------------------------------------------------------
@@ -161,11 +161,10 @@ renderText =
 
 simpleComment :: Text -> Doc a
 simpleComment docs = do
-  let open  = WL.flatAlt "/* " "// "
-  let close = WL.flatAlt (WL.line <> " */") ""
-  let trimmed = T.stripEnd (T.unlines (T.strip <$> T.lines docs))
-  WL.group $
-    open <> WL.align (WL.pretty trimmed) <> close
+  let open  = "/**" <> WL.line
+  let close = WL.line <> " */"
+  let body = WL.pretty $ T.stripEnd (T.unlines (T.stripEnd . (" * " <>) . T.strip <$> T.lines docs))
+  open <> WL.align body <> close
 
 
 -- | Converts a curried function to a function on a triple.
