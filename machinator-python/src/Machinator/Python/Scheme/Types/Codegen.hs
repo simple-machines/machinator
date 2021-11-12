@@ -61,9 +61,13 @@ genTypesV1' environment (Definition name mDoc dec) =
     Newtype _           -> mempty
 
 
-genTypeV1 :: Type -> Doc a
-genTypeV1 ty =
+genTypeV1 :: Map Name DataType -> Type -> Doc a
+genTypeV1 environment ty =
   case ty of
+    Variable nm
+      | Just (Newtype (_, ty')) <- M.lookup nm environment
+      -> genTypeV1 environment ty'
+
     Variable (Name n) ->
       -- NB: We don't actually do anything with typevars. This case will probably
       -- result in an error in the generated code.
@@ -87,11 +91,11 @@ genTypeV1 ty =
         DateTimeT ->
           text "datetime.datetime"
     ListT t2 ->
-      text "typing.List" WL.<> WL.brackets (genTypeV1 t2)
+      text "typing.List" WL.<> WL.brackets (genTypeV1 environment t2)
     MaybeT t2 ->
-      string "typing.Optional" <> WL.brackets (genTypeV1 t2)
+      string "typing.Optional" <> WL.brackets (genTypeV1 environment t2)
     MapT k v ->
-      text "typing.Dict" <> (WL.brackets . WL.hcat) (WL.punctuate ", " [genTypeV1 k, genTypeV1 v])
+      text "typing.Dict" <> (WL.brackets . WL.hcat) (WL.punctuate ", " [genTypeV1 environment k, genTypeV1 environment v])
 
 -- -----------------------------------------------------------------------------
 
@@ -117,7 +121,7 @@ googleDocstring mDocs flds mRet excs =
       Just (Docs d) -> [WL.vsep (text . T.strip <$> T.lines d)]
       Nothing -> mempty
 
-    arg (nm, ty, comment) = text (unName (M.findWithDefault nm nm mangle)) <> " (" <> genTypeV1 ty <> "): " <> text comment
+    arg (nm, ty, comment) = text (unName (M.findWithDefault nm nm mangle)) <> " (" <> genTypeV1 M.empty ty <> "): " <> text comment
     argumentsSection =
       case flds of
         [] -> mempty
@@ -167,11 +171,8 @@ fields _ [] = []
 fields environment fs =
   let
     mangle = mangleNames . S.fromList . fmap fst $ fs
-    field (nm, Variable n)
-      | Just (Newtype (_, ty)) <- M.lookup n environment
-      = field (nm, ty)
     field (nm, ty) = case M.findWithDefault nm nm mangle of
-      Name n -> Just (text n WL.<> WL.char ':' WL.<+> genTypeV1 ty)
+      Name n -> Just (text n WL.<> WL.char ':' WL.<+> genTypeV1 environment ty)
   in mapMaybe field fs
 
 -- -----------------------------------------------------------------------------
@@ -497,10 +498,7 @@ generateJsonSchema environment (Name n) disc flds =
     discriminatorField True =
       [(discriminatorProperty, dict [("type", WL.dquotes "string"), ("enum", WL.list ["cls.ADT_TYPE"])])]
     fieldSchema :: (Name, Type) -> (Text, Doc a)
-    fieldSchema (nm, Variable fn)
-      | Just (Newtype (_, ty)) <- M.lookup fn environment
-      = fieldSchema (nm, ty)
-    fieldSchema (Name f, ty) = (f, schemaType ty)
+    fieldSchema (Name f, ty) = (f, schemaType environment ty)
 
     requiredField (Name f, ty) =
       case ty of
@@ -515,11 +513,8 @@ generateToJson environment _ disc fieldDefs =
     mangle = mangleNames (S.fromList (fmap fst fieldDefs))
     -- (fieldName, jsonProperty, type)
     properties = fmap (\(n, t) -> (M.findWithDefault n n mangle, n, t)) fieldDefs
-    serialiseField (nm0, nm1, Variable fn)
-      | Just (Newtype (_, ty)) <- M.lookup fn environment
-      = serialiseField (nm0, nm1, ty)
     serialiseField (Name f, Name p, ty) =
-      (p, serialiseType ("self." <> text f) ty)
+      (p, serialiseType environment ("self." <> text f) ty)
     discriminatorField False = []
     discriminatorField True = [(discriminatorProperty, "self.ADT_TYPE")]
   in
@@ -538,13 +533,10 @@ generateFromJson environment name@(Name klass) fieldDefs =
     mangle = mangleNames . S.fromList . fmap fst $ fieldDefs
     -- (fieldName, jsonProperty, type)
     properties = fmap (\(n, t) -> (M.findWithDefault n n mangle, n, t)) fieldDefs
-    parseField (nm0, nm1, Variable fn)
-      | Just (Newtype (_, ty)) <- M.lookup fn environment
-      = parseField (nm0, nm1, ty)
     parseField (Name f, Name p, ty@(MaybeT _)) =
-      text f <> "=" <> parseType ("data.get(" <> WL.dquotes (text p) <> ", None)") ty <> ","
+      text f <> "=" <> parseType environment ("data.get(" <> WL.dquotes (text p) <> ", None)") ty <> ","
     parseField (Name f, Name p, ty) =
-      text f <> "=" <> parseType ("data[" <> WL.dquotes (text p) <> "]") ty <> ","
+      text f <> "=" <> parseType environment ("data[" <> WL.dquotes (text p) <> "]") ty <> ","
   in
     classmethod . method "from_json" "cls" [(Name "data", Right "dict")] (Variable name) $ WL.vsep (
       googleDocstring
@@ -581,9 +573,12 @@ generateFromJson environment name@(Name klass) fieldDefs =
 -- -----------------------------------------------------------------------------
 
 -- | Generate the Python expression for a type's JSON schema.
-schemaType :: Type -> Doc a
-schemaType ty =
+schemaType :: Map Name DataType -> Type -> Doc a
+schemaType environment ty =
   case ty of
+    Variable nm
+      | Just (Newtype (_, ty')) <- M.lookup nm environment
+      -> schemaType environment ty'
     Variable (Name v) -> text v <> ".json_schema()"
     GroundT gr -> case gr of
       StringT -> dict [("type", WL.dquotes "string")]
@@ -596,20 +591,23 @@ schemaType ty =
       DateTimeT -> dict [("type", WL.dquotes "string"), ("format", WL.dquotes "date-time")]
     ListT ty' -> dict [
         ("type", WL.dquotes "array"),
-        ("item", WL.group (schemaType ty'))
+        ("item", WL.group (schemaType environment ty'))
       ]
     MaybeT ty' -> dict [("oneOf", list [
         WL.group (dict [("type", WL.dquotes "null")]),
-        WL.group (schemaType ty')
+        WL.group (schemaType environment ty')
       ])]
     MapT _ v -> dict [
         ("type", WL.dquotes "object"),
-        ("additionalProperties", schemaType v)
+        ("additionalProperties", schemaType environment v)
       ]
 
 -- | JSON keys are strings, we need to serialise the JSON encoding to a string.
-serialiseKey :: Doc a -> Type -> Doc a
-serialiseKey value ty = case ty of
+serialiseKey :: Map Name DataType -> Doc a -> Type -> Doc a
+serialiseKey environment value ty = case ty of
+  Variable nm
+    | Just (Newtype (_, ty')) <- M.lookup nm environment
+    -> serialiseKey environment value ty'
   Variable _ -> value <> ".to_json_key()"
   GroundT gr -> case gr of
     StringT -> "str" <> WL.parens value
@@ -625,8 +623,11 @@ serialiseKey value ty = case ty of
   MapT _ _ -> "raise ValueError('Cannot use maps as keys')"
 
 -- | Generate the Python expression to serialise a type to JSON.
-serialiseType :: Doc a -> Type -> Doc a
-serialiseType value ty = case ty of
+serialiseType :: Map Name DataType -> Doc a -> Type -> Doc a
+serialiseType environment value ty = case ty of
+  Variable nm
+    | Just (Newtype (_, ty')) <- M.lookup nm environment
+    -> serialiseType environment value ty'
   Variable _ -> value <> ".to_json()"
   GroundT gr -> case gr of
     StringT -> "str" <> WL.parens value
@@ -637,15 +638,18 @@ serialiseType value ty = case ty of
     UUIDT -> "str" <> WL.parens value
     DateT -> value <> ".isoformat()"
     DateTimeT -> value <> ".strftime('%Y-%m-%dT%H:%M:%S.%f%z')" -- TODO: We should force timezones?
-  ListT ty' -> "[" <> serialiseType "v" ty' <> " for v in " <> value <> "]"
-  MaybeT ty' -> "(" <> "lambda v: v and " <> serialiseType "v" ty' <> ")(" <> value <> ")"
+  ListT ty' -> "[" <> serialiseType environment "v" ty' <> " for v in " <> value <> "]"
+  MaybeT ty' -> "(" <> "lambda v: v and " <> serialiseType environment "v" ty' <> ")(" <> value <> ")"
   -- TODO: This just blindly assumes that k will be serialised to a str and not any other JSON document.
-  MapT k v -> "{" <> serialiseKey "k" k <> ":" <+> serialiseType "v" v <+> "for" <+> "k, v" <+> "in" <+> value <> ".items()}"
+  MapT k v -> "{" <> serialiseKey environment "k" k <> ":" <+> serialiseType environment "v" v <+> "for" <+> "k, v" <+> "in" <+> value <> ".items()}"
 
 
 -- | JSON keys are strings, we need to serialise the JSON encoding to a string.
-parseKey :: Doc a -> Type -> Doc a
-parseKey value ty = case ty of
+parseKey :: Map Name DataType -> Doc a -> Type -> Doc a
+parseKey environment value ty = case ty of
+  Variable nm
+    | Just (Newtype (_, ty')) <- M.lookup nm environment
+    -> parseKey environment value ty'
   Variable (Name t) -> text t <> ".from_json_key" <> WL.parens value
   GroundT gr -> case gr of
     StringT -> "str" <> WL.parens value
@@ -661,8 +665,11 @@ parseKey value ty = case ty of
   MapT _ _ -> "raise ValueError('Cannot use maps as keys')"
 
 -- | Generate the Python expression to parse a type from JSON.
-parseType :: Doc a -> Type -> Doc a
-parseType value ty = case ty of
+parseType :: Map Name DataType -> Doc a -> Type -> Doc a
+parseType environment value ty = case ty of
+  Variable nm
+    | Just (Newtype (_, ty')) <- M.lookup nm environment
+    -> parseType environment value ty'
   Variable (Name t) -> text t <> ".from_json" <> WL.parens value
   GroundT gr -> case gr of
     -- TODO: We validate before parsing, so at least some of these probably aren't necessary.
@@ -674,10 +681,10 @@ parseType value ty = case ty of
     UUIDT -> "uuid.UUID" <> WL.parens ("hex=" <> value)
     DateT -> "datetime.date.fromisoformat" <> WL.parens value
     DateTimeT -> "isodate.parse_datetime("<> value <> ")"
-  ListT ty' -> "[" <> parseType "v" ty' <> " for v in " <> value <> "]"
+  ListT ty' -> "[" <> parseType environment "v" ty' <> " for v in " <> value <> "]"
   MaybeT ty' -> WL.group (
       "(" WL.<##>
-        flatIndent 4 ("lambda v: v and " <> parseType "v" ty') WL.<##>
+        flatIndent 4 ("lambda v: v and " <> parseType environment "v" ty') WL.<##>
       ")(" WL.<##>
         flatIndent 4 value WL.<##>
       ")"
@@ -685,7 +692,7 @@ parseType value ty = case ty of
   MapT k v ->
     WL.group (
       "{" WL.<##>
-        flatIndent 4 (parseKey "k" k <> ":" <+> parseType "v" v <+> "for" <+> "k, v" <+> "in" <+> value <> ".items()") WL.<##>
+        flatIndent 4 (parseKey environment "k" k <> ":" <+> parseType environment "v" v <+> "for" <+> "k, v" <+> "in" <+> value <> ".items()") WL.<##>
       "}"
     )
 
@@ -709,12 +716,12 @@ classmethod body =
 method :: Text -> Text -> [(Name, Either Type Text)] -> Type -> Doc a -> Doc a
 method name self args ret body =
     WL.vsep [
-      string "def" WL.<+> text name <> WL.encloseSep WL.lparen WL.rparen WL.comma (text self : fmap arg args) WL.<+> "->" WL.<+> genTypeV1 ret WL.<> WL.char ':'
+      string "def" WL.<+> text name <> WL.encloseSep WL.lparen WL.rparen WL.comma (text self : fmap arg args) WL.<+> "->" WL.<+> genTypeV1 M.empty ret WL.<> WL.char ':'
     , WL.indent 4 body
     ]
   where
     arg :: (Name, Either Type Text) -> Doc a
-    arg (Name n, t) = text n WL.<> WL.char ':' WL.<+> either genTypeV1 text t
+    arg (Name n, t) = text n WL.<> WL.char ':' WL.<+> either (genTypeV1 M.empty) text t
 
 
 -- | Literal Python dictionary.
