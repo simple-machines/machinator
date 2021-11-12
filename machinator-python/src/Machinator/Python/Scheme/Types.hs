@@ -27,18 +27,24 @@ types v ds =
     PythonTypesV1 ->
       typesV1 ds
 
+isNewtype :: DataType -> Bool
+isNewtype Newtype {} = True
+isNewtype _ = False
+
 typesV1 :: [DefinitionFile] -> Either PythonTypesError [(FilePath, Text)]
 typesV1 dfs =
-  let DefinitionFileGraph fg = MG.buildFileGraph dfs
+  let excludingNewtypes = (\df -> df { definitionFileDefinitions = filter (\(Definition _ _ c) -> not $ isNewtype c) $ definitionFileDefinitions df }) <$> dfs
+      DefinitionFileGraph fg = MG.buildFileGraph excludingNewtypes
       mg = M.mapKeys filePathToModuleName (fmap (M.mapKeys filePathToModuleName) fg)
+      environment = M.fromList $ ((,) <$> defName <*> defType) <$> concatMap definitionFileDefinitions dfs
   in for dfs $ \(DefinitionFile fp defs) ->
        let mn = filePathToModuleName fp in
-       pure (genFileName mn, renderModule fp mn mg defs)
+       pure (genFileName mn, renderModule fp mn mg environment defs)
 
 -- -----------------------------------------------------------------------------
 
-renderModule :: FilePath -> ModuleName -> Map ModuleName (Map ModuleName (Set Name)) -> [Definition] -> Text
-renderModule fp mn@(ModuleName n) imports defs =
+renderModule :: FilePath -> ModuleName -> Map ModuleName (Map ModuleName (Set Name)) -> Map Name DataType -> [Definition] -> Text
+renderModule fp mn@(ModuleName n) imports environment defs =
   T.unlines (
     [ "\"\"\"Generated implementation of " <> n <> ".\"\"\""
     , ""
@@ -59,7 +65,7 @@ renderModule fp mn@(ModuleName n) imports defs =
     , "import uuid  # noqa: F401"
     ]
     <> maybe mempty (("":) . fmap renderImport . M.toList) (mfilter (not . null) $ M.lookup mn imports)
-    <> with defs Codegen.genTypesV1
+    <> with defs (Codegen.genTypesV1 environment)
   )
 
 renderImport :: (ModuleName, Set Name) -> Text
