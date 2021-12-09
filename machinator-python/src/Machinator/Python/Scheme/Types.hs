@@ -57,7 +57,10 @@ renderModule fp mn@(ModuleName n) imports defs =
     , "import logging  # noqa: F401"
     , "import typing  # noqa: F401"
     , "import uuid  # noqa: F401"
-    , "from anaml_client.utils.serialisation import JsonObject  # Workaround for Map of feature data"
+    , "try:"
+    , "    from anaml_client.utils.serialisation import JsonObject  # noqa: F401"
+    , "except ImportError:"
+    , "    pass"
     ]
     <> maybe mempty (("":) . fmap renderImport . M.toList) (mfilter (not . null) $ M.lookup mn imports)
     <> with defs Codegen.genTypesV1
