@@ -38,8 +38,7 @@ main = do
   where
     opts = info (inputs <**> helper)
       ( fullDesc
-     <> progDesc "Print a greeting for TARGET"
-     <> header "hello - a test for optparse-applicative" )
+     <> progDesc "Generate Swagger documentation for machinator definitions." )
 
 parseData :: [FilePath] -> EitherT Machinator.MachinatorError IO [Machinator.DefinitionFile]
 parseData dfiles = do

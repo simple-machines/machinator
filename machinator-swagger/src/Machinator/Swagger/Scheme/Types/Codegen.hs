@@ -85,6 +85,13 @@ genNewtype nDoc wrappedType =
             & type_ ?~ OpenApiArray
             & items ?~ OpenApiItemsObject (genTypeV1 t2)
             & description .~ (docText <$> nDoc)
+        NonEmptyT t2 ->
+          mempty
+            & type_ ?~ OpenApiArray
+            & items ?~ OpenApiItemsObject (genTypeV1 t2)
+            & minItems ?~ 1
+            & description .~ (docText <$> nDoc)
+
         MaybeT t2 ->
           genNewtype nDoc t2
             & nullable ?~ True
@@ -116,6 +123,12 @@ genTypeV1 ty =
         $ mempty
         & type_ ?~ OpenApiArray
         & items ?~ OpenApiItemsObject (genTypeV1 t2)
+    NonEmptyT t2 -> do
+      Inline
+        $ mempty
+        & type_ ?~ OpenApiArray
+        & items ?~ OpenApiItemsObject (genTypeV1 t2)
+        & minItems ?~ 1
 
     MaybeT t2 ->
       genTypeV1 t2

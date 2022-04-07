@@ -85,6 +85,8 @@ genTypeV1 ty =
           text "java.time.Instant"
     ListT t2 ->
       string "List" <> WL.brackets (genTypeV1 t2)
+    NonEmptyT t2 ->
+      string "cats.data.NonEmptyList" <> WL.brackets (genTypeV1 t2)
     MaybeT t2 ->
       string "Option" <> WL.brackets (genTypeV1 t2)
     MapT k v ->

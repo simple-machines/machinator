@@ -32,7 +32,9 @@ generateAesonModuleV1 defs =
     , "import qualified Data.Aeson"
     , "import qualified Data.Aeson.Types"
     , "import qualified Data.Functor"
-    , "import           Data.Text (Text)"
+    , "import          Data.Text (Text)"
+    , "import qualified Data.Map"
+    , "import qualified Data.List.NonEmpty"
     , T.unlines (fmap (T.pack . TH.pprint) (generateAesonV1 defs))
     ]
 
@@ -100,6 +102,10 @@ typeToJson ty =
     M.Variable n ->
       XTH.varE (generateToJsonNameV1 n)
     M.ListT t2 ->
+      fmap_ (typeToJson t2)
+    M.NonEmptyT t2 ->
+      fmap_ (typeToJson t2)
+    M.MapT _tk t2 ->
       fmap_ (typeToJson t2)
     M.MaybeT t2 ->
       fmap_ (typeToJson t2)
@@ -182,6 +188,10 @@ typeFromJson ty =
     M.Variable n ->
       XTH.varE (generateFromJsonNameV1 n)
     M.ListT t2 ->
+      mapM__ (typeFromJson t2)
+    M.NonEmptyT t2 ->
+      mapM__ (typeFromJson t2)
+    M.MapT _ t2 ->
       mapM__ (typeFromJson t2)
     M.MaybeT t2 ->
       mapM__ (typeFromJson t2)
@@ -270,7 +280,7 @@ withObject__ msg v p =
 
 text_ :: TH.Type
 text_ =
-  (XTH.conT (TH.mkName "Text"))
+  XTH.conT (TH.mkName "Text")
 
 fail_ :: Text -> Exp
 fail_ t =

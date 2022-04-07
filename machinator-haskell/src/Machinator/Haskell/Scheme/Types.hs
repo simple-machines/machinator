@@ -9,10 +9,9 @@ module Machinator.Haskell.Scheme.Types (
 
 
 import qualified Data.Char as Char
-import           Data.Map.Strict (Map)
+import          Data.Map.Strict (Map)
 import qualified Data.Map.Strict as M
-import           Data.Set (Set)
-import qualified Data.Set as S
+import          Data.Set (Set)
 import qualified Data.Text as T
 
 import           Machinator.Core
@@ -55,6 +54,8 @@ renderModule mn@(ModuleName n) imports defs =
     , "import Data.Text (Text)"
     , "import qualified Data.Time"
     , "import qualified Data.UUID"
+    , "import qualified Data.Map"
+    , "import qualified Data.List.NonEmpty"
     , maybe mempty (T.unlines . fmap renderImport . toList) (M.lookup mn imports)
     , T.unlines (fmap (T.pack . TH.pprint . genTypesV1) defs)
     ]

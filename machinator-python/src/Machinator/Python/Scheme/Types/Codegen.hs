@@ -86,6 +86,8 @@ genTypeV1 ty =
           text "datetime.datetime"
     ListT t2 ->
       text "typing.List" WL.<> WL.brackets (genTypeV1 t2)
+    NonEmptyT t2 ->
+      text "typing.List" WL.<> WL.brackets (genTypeV1 t2)
     MaybeT t2 ->
       string "typing.Optional" <> WL.brackets (genTypeV1 t2)
     MapT k v ->
@@ -200,7 +202,7 @@ enum n@(Name klass) mDoc ctors =
         )
     ]
   where
-    instanceName (Name n) = Name (if klass `T.isSuffixOf` n then T.dropEnd (T.length klass) n else n)
+    instanceName (Name n_) = Name (if klass `T.isSuffixOf` n_ then T.dropEnd (T.length klass) n_ else n_)
     def (Name m, doc) =
       let d = WL.hsep [text  m, WL.char '=', WL.dquotes $ (text . T.toLower) m]
       in case doc of
@@ -747,6 +749,10 @@ schemaType ty =
         ("type", WL.dquotes "array"),
         ("item", WL.group (schemaType ty'))
       ]
+    NonEmptyT ty' -> dict [
+        ("type", WL.dquotes "array"),
+        ("item", WL.group (schemaType ty'))
+      ]
     MaybeT ty' -> dict [("oneOf", list [
         WL.group (dict [("type", WL.dquotes "null")]),
         WL.group (schemaType ty')
@@ -770,6 +776,7 @@ serialiseKey value ty = case ty of
     DateT -> value <> ".isoformat()"
     DateTimeT -> value <> ".strftime('%Y-%m-%dT%H:%M:%S.%f%z')" -- TODO: We should force timezones?
   ListT _ -> "raise ValueError('Cannot use lists as keys')"
+  NonEmptyT _ -> "raise ValueError('Cannot use non-empty lists as keys')"
   MaybeT _ -> "raise ValueError('Cannot use optional values as keys')"
   MapT _ _ -> "raise ValueError('Cannot use maps as keys')"
 
@@ -787,6 +794,7 @@ serialiseType value ty = case ty of
     DateT -> value <> ".isoformat()"
     DateTimeT -> value <> ".strftime('%Y-%m-%dT%H:%M:%S.%f%z')" -- TODO: We should force timezones?
   ListT ty' -> "[" <> serialiseType "v" ty' <> " for v in " <> value <> "]"
+  NonEmptyT ty' -> "[" <> serialiseType "v" ty' <> " for v in " <> value <> "]"
   MaybeT ty' -> "(" <> "lambda v: v and " <> serialiseType "v" ty' <> ")(" <> value <> ")"
   -- TODO: This just blindly assumes that k will be serialised to a str and not any other JSON document.
   MapT k v -> "{" <> serialiseKey "k" k <> ":" <+> serialiseType "v" v <+> "for" <+> "k, v" <+> "in" <+> value <> ".items()}"
@@ -806,6 +814,7 @@ parseKey value ty = case ty of
     DateT -> "datetime.date.fromisoformat" <> WL.parens value
     DateTimeT -> "isodate.parse_datetime("<> value <> ")"
   ListT _ -> "raise ValueError('Cannot use lists as keys')"
+  NonEmptyT _ -> "raise ValueError('Cannot use non-empty lists as keys')"
   MaybeT _ -> "raise ValueError('Cannot use optional values as keys')"
   MapT _ _ -> "raise ValueError('Cannot use maps as keys')"
 
@@ -824,6 +833,7 @@ parseType value ty = case ty of
     DateT -> "datetime.date.fromisoformat" <> WL.parens value
     DateTimeT -> "isodate.parse_datetime("<> value <> ")"
   ListT ty' -> "[" <> parseType "v" ty' <> " for v in " <> value <> "]"
+  NonEmptyT ty' -> "[" <> parseType "v" ty' <> " for v in " <> value <> "]"
   MaybeT ty' -> WL.group (
       "(" WL.<##>
         flatIndent 4 ("lambda v: v and " <> parseType "v" ty') WL.<##>
