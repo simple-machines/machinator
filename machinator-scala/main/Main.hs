@@ -21,12 +21,13 @@ import           X.Control.Monad.Trans.Either.Exit (orDie)
 
 import           Machinator.Core as Machinator
 import           Machinator.Scala as Machinator
+import           Machinator.Scala.Data.Types ( renderScalaTypesError )
 
 data Options
   = Options
-    { targetDirectory :: FilePath  -- ^ Directory to write output files.
-    , package :: Text              -- ^ Scala package name.
-    , sourceFiles :: [FilePath]    -- ^ Input files.
+    { targetDirectory :: Maybe FilePath  -- ^ Directory to write output files.
+    , package :: Text                    -- ^ Scala package name.
+    , sourceFiles :: [FilePath]          -- ^ Input files.
     }
 
 inputs :: Parser [FilePath]
@@ -34,21 +35,29 @@ inputs = many (strArgument (metavar "machinator"))
 
 options :: Parser Options
 options = Options
-  <$> strOption (long "target" <> metavar "DIR")
+  <$> optional (strOption (long "target" <> metavar "DIR"))
   <*> strOption (long "package" <> metavar "PKG")
   <*> inputs
 
 main :: IO ()
 main = do
-  (Options out pkg files) <- execParser opts
-  definitions <- orDie (T.pack . show) $ parseData files
-  results     <- orDie (T.pack . show) $ hoistEither $ typesV1 pkg definitions
+  (Options mOut pkg files) <- execParser opts
+  definitions <- orDie renderMachinatorError $ parseData files
+  results     <- orDie renderScalaTypesError $ hoistEither $ typesV1 pkg definitions
 
-  for_ results $ \(fp, contents) -> do
-    let dest = out </> fp
-    createDirectoryIfMissing True (takeDirectory dest)
-    T.writeFile dest contents
-    IO.putStrLn ("Created " <> dest )
+  case mOut of
+    Just out ->
+      for_ results $ \(fp, contents) -> do
+        let dest = out </> fp
+        createDirectoryIfMissing True (takeDirectory dest)
+        T.writeFile dest contents
+        IO.putStrLn ("Created " <> dest )
+    Nothing ->
+      for_ results $ \(fp, contents) -> do
+        IO.putStrLn ("File: " <> fp )
+        IO.putStrLn (T.unpack contents)
+
+
 
   where
     opts = info (options <**> helper)

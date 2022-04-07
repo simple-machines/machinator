@@ -214,7 +214,7 @@ record v doc = do
   x <- ident
   token TEquals
   token TLBrace
-  fts <- sepBy (recordField v) (token TComma)
+  fts <- M.sepBy (recordField v) (token TComma)
   token TRBrace
   pure (Definition x doc (Record fts))
 
@@ -246,6 +246,8 @@ types' v = do
   case x of
     Name "List" ->
       hasFeature v HasLists *> (ListT <$> types v)
+    Name "NonEmpty" ->
+      hasFeature v HasNels *> (NonEmptyT <$> types v)
     Name "Map" ->
       hasFeature v HasMaps  *> (MapT <$> types v <*> types v)
     Name "Maybe" ->
@@ -258,8 +260,8 @@ types' v = do
           pure (Variable x)
 
 parens :: Parser a -> Parser a
-parens p =
-  M.between (M.try (token TLParen)) (token TRParen) p
+parens =
+  M.between (M.try (token TLParen)) (token TRParen)
 
 optionalParens :: Parser a -> Parser a
 optionalParens p =

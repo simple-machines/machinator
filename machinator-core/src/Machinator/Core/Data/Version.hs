@@ -66,6 +66,7 @@ data MachinatorFeature
   | HasVariants
   | HasLists
   | HasMaps
+  | HasNels
   | HasRecords
   | HasBools
   | HasComments
@@ -100,6 +101,7 @@ versionFeatures mv =
         , HasVariants
         , HasLists
         , HasMaps
+        , HasNels
         , HasRecords
         , HasBools
         , HasComments

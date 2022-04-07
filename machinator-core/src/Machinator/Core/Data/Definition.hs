@@ -76,6 +76,7 @@ data Type
   = Variable Name
   | GroundT Ground
   | ListT Type
+  | NonEmptyT Type
   | MaybeT Type
   | MapT Type Type
   deriving (Eq, Ord, Show, Data, Typeable, Generic)
@@ -164,6 +165,8 @@ freeInType t =
     GroundT _ ->
       S.empty
     ListT lt ->
+      freeInType lt
+    NonEmptyT lt ->
       freeInType lt
     MaybeT lt ->
       freeInType lt
