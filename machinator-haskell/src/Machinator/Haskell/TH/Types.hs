@@ -86,6 +86,10 @@ genTypeV1 ty =
           XTH.conT (XTH.mkName_ "Data.Time.LocalTime")
     ListT t2 ->
       XTH.listT_ (genTypeV1 t2)
+    NonEmptyT t2 ->
+      XTH.appT (XTH.conT (XTH.mkName_ "Data.List.NonEmpty.NonEmpty")) (genTypeV1 t2)
+    MapT tk tv ->
+      XTH.conT (XTH.mkName_ "Data.Map.Map") `XTH.appT` genTypeV1 tk `XTH.appT` genTypeV1 tv
     MaybeT t2 ->
       XTH.appT (XTH.conT (XTH.mkName_ "Maybe")) (genTypeV1 t2)
 
