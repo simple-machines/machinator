@@ -3,7 +3,6 @@ packages: machinator-core/
           machinator-python/
           machinator-scala/
           machinator-swagger/
-          lib/disorder/disorder-aeson
           lib/disorder/disorder-core
           lib/disorder/disorder-corpus
           lib/disorder/disorder-jack
