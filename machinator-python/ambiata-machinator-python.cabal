@@ -37,7 +37,7 @@ library
                        Machinator.Python.Scheme.Types.Codegen
 
 
-executable gen-python
+executable machinator-gen-python
   hs-source-dirs:      main
   main-is:             Main.hs
   ghc-options:         -Wall -threaded -O2
