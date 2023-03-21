@@ -134,7 +134,7 @@ Run the cabal build:
 > cabal build all
 ```
 
-Building individual packages:
+Alternativley building individual packages:
 
 ```
 > cabal build exe:gen-scala
