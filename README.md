@@ -110,3 +110,40 @@ else is a bonus.
 - Tim H
 - Jacob
 - Charles
+
+## Building
+
+### Prerequisite
+The Machinator repo makes use of submodules (in the lib/ folder); to initialise or update:
+```
+> git submodule init
+> git submodule update
+```
+
+
+### Nix users
+If you use [Nix](https://nixos.org/download.html):
+
+Enter a Nix shell from the project root:
+```
+> nix develop
+```
+
+Run the cabal build:
+```
+> cabal build all
+```
+
+Building individual packages:
+
+```
+> cabal build exe:gen-scala
+> cabal build exe:gen-python
+```
+
+Alternativley you can use `cabal install` to install the packages to `~/.cabal/bin` and add `~/.cabal/bin` to your path:
+
+```
+> cabal install exe:gen-scala
+> cabal install exe:gen-python
+```
