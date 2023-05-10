@@ -795,7 +795,7 @@ serialiseType value ty = case ty of
     DateTimeT -> value <> ".strftime('%Y-%m-%dT%H:%M:%S.%f%z')" -- TODO: We should force timezones?
   ListT ty' -> "[" <> serialiseType "v" ty' <> " for v in " <> value <> "]"
   NonEmptyT ty' -> "[" <> serialiseType "v" ty' <> " for v in " <> value <> "]"
-  MaybeT ty' -> "(" <> "lambda v: v and " <> serialiseType "v" ty' <> ")(" <> value <> ")"
+  MaybeT ty' -> "(" <> "lambda v: " <> serialiseType "v" ty' <> " if v is not None else v)(" <> value <> ")"
   -- TODO: This just blindly assumes that k will be serialised to a str and not any other JSON document.
   MapT k v -> "{" <> serialiseKey "k" k <> ":" <+> serialiseType "v" v <+> "for" <+> "k, v" <+> "in" <+> value <> ".items()}"
 
@@ -836,7 +836,7 @@ parseType value ty = case ty of
   NonEmptyT ty' -> "[" <> parseType "v" ty' <> " for v in " <> value <> "]"
   MaybeT ty' -> WL.group (
       "(" WL.<##>
-        flatIndent 4 ("lambda v: v and " <> parseType "v" ty') WL.<##>
+        flatIndent 4 ("lambda v: " <> parseType "v" ty' <> " if v is not None else None") WL.<##>
       ")(" WL.<##>
         flatIndent 4 value WL.<##>
       ")"
