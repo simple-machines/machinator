@@ -167,8 +167,10 @@ cabal build exe:gen-scala
 
 After running cabal build the last line should be something like:
 
-```Linking /Users/adam.evans/Code/simple-machines/machinator/dist-newstyle/build/aarch64-osx/ghc-8.10.7/ambiata-machinator-scala-1.0.0/x/gen-scala/build/gen-scala/gen-scala ...
+Linking /Users/adam.evans/Code/simple-machines/machinator/dist-newstyle/build/aarch64-osx/ghc-8.10.7/ambiata-machinator-scala-1.0.0/x/gen-scala/build/gen-scala/gen-scala ...
+
 Copy the file in the output to your path, i.e.:
+```
 cp /Users/adam.evans/Code/simple-machines/machinator/dist-newstyle/build/aarch64-osx/ghc-8.10.7/ambiata-machinator-scala-1.0.0/x/gen-scala/build/gen-scala/gen-scala \
   /usr/local/bin/machinator-gen-scala
 ```
