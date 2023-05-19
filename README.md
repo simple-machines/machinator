@@ -147,3 +147,35 @@ Alternativley you can use `cabal install` to install the packages to `~/.cabal/b
 > cabal install exe:gen-scala
 > cabal install exe:gen-python
 ```
+
+### Mac Homebrew users
+
+```
+brew install ghc@8.10
+brew install cabal-install
+
+# You may want to add this to your .bashrc / .zshenv
+export PATH="/opt/homebrew/opt/ghc@8.10/bin:$PATH"
+export LDFLAGS="-L/opt/homebrew/opt/ghc@8.10/lib"
+```
+
+Build the binaries:
+```
+cabal build exe:gen-python
+cabal build exe:gen-scala
+```
+
+After running cabal build the last line should be something like:
+
+```Linking /Users/adam.evans/Code/simple-machines/machinator/dist-newstyle/build/aarch64-osx/ghc-8.10.7/ambiata-machinator-scala-1.0.0/x/gen-scala/build/gen-scala/gen-scala ...
+Copy the file in the output to your path, i.e.:
+cp /Users/adam.evans/Code/simple-machines/machinator/dist-newstyle/build/aarch64-osx/ghc-8.10.7/ambiata-machinator-scala-1.0.0/x/gen-scala/build/gen-scala/gen-scala \
+  /usr/local/bin/machinator-gen-scala
+```
+
+Shorthand:
+```
+sudo cp "$(cabal list-bin gen-python)" /usr/local/bin/machinator-gen-python
+
+sudo cp "$(cabal list-bin gen-scala)" /usr/local/bin/machinator-gen-scala
+```
