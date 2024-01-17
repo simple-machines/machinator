@@ -192,8 +192,8 @@ definition' v doc =
 
 variant :: MachinatorVersion -> Maybe Docs -> Parser Definition
 variant v doc = do
+  token TData
   hasFeature v HasVariants
-  M.try (token TData)
   x <- ident
   token TEquals
   cs <- sepBy1 (alternative v) (token TChoice)
@@ -204,24 +204,24 @@ alternative v = do
   mDoc <- optional docComment
   name <- ident
   ts   <- optional $ do
-    token TLBrace *> sepBy (recordField v) (token TComma) <* token TRBrace
+    token TLBrace *> M.sepEndBy (recordField v) (token TComma) <* token TRBrace
   pure (name, mDoc, fold ts)
 
 record :: MachinatorVersion -> Maybe Docs -> Parser Definition
 record v doc = do
+  token TRecord
   hasFeature v HasRecords
-  M.try (token TRecord)
   x <- ident
   token TEquals
   token TLBrace
-  fts <- M.sepBy (recordField v) (token TComma)
+  fts <- M.sepEndBy (recordField v) (token TComma)
   token TRBrace
   pure (Definition x doc (Record fts))
 
 newtype' :: MachinatorVersion -> Maybe Docs -> Parser Definition
 newtype' v doc = do
+  token TNewtype
   hasFeature v HasRecords
-  M.try (token TNewtype)
   x <- ident
   token TEquals
   token TLBrace
@@ -249,7 +249,7 @@ types' v = do
     Name "NonEmpty" ->
       hasFeature v HasNels *> (NonEmptyT <$> types v)
     Name "Map" ->
-      hasFeature v HasMaps  *> (MapT <$> types v <*> types v)
+      hasFeature v HasMaps *> (MapT <$> types v <*> types v)
     Name "Maybe" ->
       hasFeature v HasLists *> (MaybeT <$> types v)
     _ ->
@@ -261,11 +261,11 @@ types' v = do
 
 parens :: Parser a -> Parser a
 parens =
-  M.between (M.try (token TLParen)) (token TRParen)
+  M.between (token TLParen) (token TRParen)
 
 optionalParens :: Parser a -> Parser a
 optionalParens p =
-  M.try (parens p) <|> p
+  parens p <|> p
 
 -- -----------------------------------------------------------------------------
 
