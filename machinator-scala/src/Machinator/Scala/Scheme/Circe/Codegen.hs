@@ -1,6 +1,7 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternGuards #-}
+{-# LANGUAGE LambdaCase #-}
 module Machinator.Scala.Scheme.Circe.Codegen (
     generateCirceV1
   , generateToJsonV1Companion
@@ -113,8 +114,13 @@ generateFromJsonV1 def@(M.Definition (M.Name tn) _ typ) =
                                       text "Right" <> WL.parens (text n)
                                     _ ->
                                       for_yield
-                                        ( with fts $ \(M.Name f, ft) ->
-                                            (text f, text "c.downField(\"" <> text f <> "\").as[" <> genTypeV1 ft <> "]")
+                                        ( with fts $ \case
+                                            (M.Name f, ft@(M.ListT _)) ->
+                                              (text f, text "c.downField(\"" <> text f <> "\").as[Option[" <> genTypeV1 ft <> "]].map(_.getOrElse(Nil))")
+                                            (M.Name f, ft@(M.MapT _ _)) ->
+                                              (text f, text "c.downField(\"" <> text f <> "\").as[Option[" <> genTypeV1 ft <> "]].map(_.getOrElse(Map.empty))")
+                                            (M.Name f, ft) ->
+                                              (text f, text "c.downField(\"" <> text f <> "\").as[" <> genTypeV1 ft <> "]")
                                         )
                                         (text n <> WL.tupled (with fts $ \(M.Name fn, _) -> text fn))
                                 )
@@ -128,8 +134,13 @@ generateFromJsonV1 def@(M.Definition (M.Name tn) _ typ) =
                   text "Right" <> WL.parens (text tn <> WL.tupled [])
                 M.Record fts ->
                   for_yield
-                    ( with fts $ \(M.Name f, ft) ->
-                        (text f, text "c.downField(\"" <> text f <> "\").as[" <> genTypeV1 ft <> "]")
+                    ( with fts $ \case
+                        (M.Name f, ft@(M.ListT _)) ->
+                          (text f, text "c.downField(\"" <> text f <> "\").as[Option[" <> genTypeV1 ft <> "]].map(_.getOrElse(Nil))")
+                        (M.Name f, ft@(M.MapT _ _)) ->
+                          (text f, text "c.downField(\"" <> text f <> "\").as[Option[" <> genTypeV1 ft <> "]].map(_.getOrElse(Map.empty))")
+                        (M.Name f, ft) ->
+                          (text f, text "c.downField(\"" <> text f <> "\").as[" <> genTypeV1 ft <> "]")
                     )
                     (text tn <> WL.tupled (with fts $ \(M.Name n, _) -> text n))
                 M.Newtype (M.Name wrapper, wrappedType) ->
