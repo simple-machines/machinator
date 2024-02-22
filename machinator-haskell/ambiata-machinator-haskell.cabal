@@ -39,7 +39,7 @@ library
 
 
 
-executable gen-haskell
+executable machinator-gen-haskell
   hs-source-dirs:      main
   main-is:             Main.hs
   ghc-options:         -Wall -threaded -O2
